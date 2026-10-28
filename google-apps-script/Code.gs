@@ -23,21 +23,33 @@ const classeur_ = () => SpreadsheetApp.openById(PropertiesService.getScriptPrope
 function creerClasseur() {
   const ss = SpreadsheetApp.create('Resser · Test A · données emballages');
   const vierge = ss.getSheets()[0];
-  try {
-    const src = SpreadsheetApp.openById(ID_FEUILLE).getSheets()[0];
-    const valeurs = src.getDataRange().getValues();
-    const dest = ss.insertSheet('Ticket test (saisie manuelle)');
-    dest.getRange(1, 1, valeurs.length, valeurs[0].length).setValues(valeurs);
-    dest.getRange(1, 1, 1, valeurs[0].length).setFontWeight('bold');
-  } catch (err) {
-    Logger.log(`Feuille de départ non copiée : ${err}`);
-  }
   PropertiesService.getScriptProperties().setProperty('ID_CLASSEUR', ss.getId());
+  copierFeuilleDepart();
   configurer();
   ss.deleteSheet(vierge);
   ss.setActiveSheet(ss.getSheetByName(ONGLETS.ref));
   ss.moveActiveSheet(1);
   Logger.log(`Nouvelle feuille : ${ss.getUrl()}`);
+}
+
+// Copie (texte affiché uniquement : les images dans les cellules ne se recopient pas)
+// du premier onglet de la feuille de départ dans la feuille de travail.
+function copierFeuilleDepart() {
+  const nom = 'Ticket test (saisie manuelle)';
+  try {
+    const src = SpreadsheetApp.openById(ID_FEUILLE).getSheets()[0];
+    const n = src.getLastRow(), m = src.getLastColumn();
+    const valeurs = src.getRange(1, 1, n, m).getDisplayValues();
+    const ss = classeur_();
+    const dest = ss.getSheetByName(nom) || ss.insertSheet(nom);
+    dest.clear();
+    dest.getRange(1, 1, n, m).setValues(valeurs);
+    dest.getRange(1, 1, 1, m).setFontWeight('bold');
+    dest.setFrozenRows(1);
+    Logger.log(`Feuille de départ copiée : ${n} lignes.`);
+  } catch (err) {
+    Logger.log(`Feuille de départ non copiée : ${err}`);
+  }
 }
 
 const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire' };

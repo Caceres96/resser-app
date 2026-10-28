@@ -25,17 +25,30 @@
 
   <main>
     <section id="tab-escanear" class="tab active">
+      <details class="card" id="contexto">
+        <summary><strong>Contexte d'achat</strong> <span id="contexto-resumen" class="note"></span></summary>
+        <div class="grid" style="margin-top:10px">
+          <label class="field">Enseigne<input id="ctx-enseigne" list="enseignes" autocomplete="off" placeholder="ex. Carrefour"></label>
+          <label class="field">Commune<input id="ctx-commune" list="communes" autocomplete="off" placeholder="ex. Nancy"></label>
+          <label class="field">Date d'achat<input id="ctx-fecha" type="date"></label>
+        </div>
+        <p class="note">Gardé entre deux scans : renseignez-le une fois par ticket.</p>
+      </details>
+
       <div class="card">
-        <label class="field">Catégorie de l'échantillon
+        <label class="field">Rayon
           <select id="categoria"></select>
         </label>
         <div class="row">
           <input id="gtin" inputmode="numeric" autocomplete="off" placeholder="Code-barres (EAN-13, EAN-8…)">
           <button id="buscar" type="button" class="primary">Rechercher</button>
         </div>
-        <div id="botones-scan" class="row scan">
-          <button id="camara" type="button" class="secondary">Scanner avec la caméra</button>
-          <label class="button secondary">Photo du code<input id="foto" type="file" accept="image/*" capture="environment" hidden></label>
+        <div id="botones-scan">
+          <div class="row scan">
+            <button id="camara" type="button" class="secondary">Scanner avec la caméra</button>
+            <label class="button secondary">Photo du code<input id="foto" type="file" accept="image/*" capture="environment" hidden></label>
+          </div>
+          <button id="sin-codigo" type="button" class="ghost wide">Produit sans code-barres (vrac, fruits et légumes…)</button>
         </div>
         <div id="lector" hidden>
           <div class="visor"><video id="video" playsinline muted></video><div class="mira"></div></div>
@@ -50,9 +63,22 @@
     </section>
 
     <section id="tab-inventario" class="tab">
+      <details class="card" id="sync-card">
+        <summary><strong>Synchronisation Google Sheets</strong> <span id="sync-resumen" class="note"></span></summary>
+        <div style="margin-top:10px">
+          <label class="field">Votre nom (colonne « saisi_par »)<input id="cfg-nombre" autocomplete="name" placeholder="ex. Cristian"></label>
+          <label class="field">URL de l'application Web (Apps Script, se termine par /exec)<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
+          <label class="field">Clé<input id="cfg-cle" autocomplete="off" placeholder="8 caractères (menu Resser de la feuille)"></label>
+          <div class="actions">
+            <button type="button" id="cfg-guardar" class="primary">Enregistrer et tester</button>
+            <button type="button" id="sync-todo" class="secondary">Envoyer les références en attente</button>
+          </div>
+          <p id="sync-estado" class="muted" role="status"></p>
+        </div>
+      </details>
       <div class="card">
         <div class="row">
-          <input id="filtro" type="search" placeholder="Filtrer par nom, marque ou code">
+          <input id="filtro" type="search" placeholder="Filtrer par nom, marque, libellé ou code">
         </div>
         <div class="actions">
           <button type="button" id="exp-ref" class="secondary">CSV références</button>
@@ -62,12 +88,14 @@
         </div>
       </div>
       <ul id="lista" class="lista"></ul>
-      <button type="button" id="borrar-todo" class="danger ghost wide">Effacer tout l'inventaire</button>
+      <button type="button" id="borrar-todo" class="danger ghost wide">Effacer tout l'inventaire de ce téléphone</button>
     </section>
 
     <section id="tab-resumen" class="tab"></section>
   </main>
 
+  <datalist id="enseignes"></datalist>
+  <datalist id="communes"></datalist>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="app.js"></script>
 </body>

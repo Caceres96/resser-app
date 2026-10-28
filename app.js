@@ -1,9 +1,9 @@
 import {
-  CATEGORIAS, FAMILIAS, MATERIALES, FORMAS, PESO_FUENTES, EXACTITUD, CAUSAS, ESTADOS_OFF,
-  familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
+  CATEGORIAS, ALIAS_CATEGORIAS, COMMUNES, ENSEIGNES, BASES, FAMILIAS, MATERIALES, FORMAS, PESO_FUENTES, EXACTITUD,
+  CAUSAS, ESTADOS_OFF, familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
 } from './reglas.js';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 const KEY = 'resser.pruebaA.v1'; // clé inchangée pour conserver les données déjà saisies
 const OFF_FIELDS = 'code,product_name,product_name_fr,brands,quantity,packagings,packagings_complete,image_front_small_url';
 // Lecteur de secours (zxing-cpp en WebAssembly) quand le navigateur n'a pas de BarcodeDetector natif (iPhone, Firefox…).
@@ -18,8 +18,9 @@ const num = (v) => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v)
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const g1 = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const ahora = () => new Date().toISOString();
+const hoy = () => new Date().toISOString().slice(0, 10);
 
-// ---------- Stockage (dans le navigateur ; exporter des sauvegardes régulièrement) ----------
+// ---------- Stockage (dans le navigateur ; la feuille Google sert de copie partagée) ----------
 
 function cargar() {
   try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
@@ -31,6 +32,9 @@ function guardar() {
 const db = cargar();
 db.refs ??= {};
 db.prefs ??= {};
+// Migration des catégories des versions ≤ 0.3 vers les rayons.
+for (const r of Object.values(db.refs)) if (ALIAS_CATEGORIAS[r.categoria]) r.categoria = ALIAS_CATEGORIAS[r.categoria];
+if (ALIAS_CATEGORIAS[db.prefs.categoria]) db.prefs.categoria = ALIAS_CATEGORIAS[db.prefs.categoria];
 
 // ---------- Utilitaires ----------
 
@@ -68,18 +72,25 @@ function descargar(nombre, contenido, tipo) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-// ---------- Open Food Facts ----------
+// ---------- Bases Open Facts (alimentaire, beauté, autres produits) ----------
+
+async function consultarBase(base, gtin) {
+  const url = `https://${base.host}/api/v3/product/${gtin}?fields=${OFF_FIELDS}`;
+  let r;
+  try { r = await fetch(url); } catch { throw new Error(`Pas de connexion avec ${base.label}.`); }
+  if (r.status === 429) throw new Error(`Limite ${base.label} atteinte (15 requêtes/min). Patientez une minute.`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`${base.label} a répondu ${r.status}.`);
+  const j = await r.json();
+  return j.product || null;
+}
 
 async function consultarOFF(gtin) {
-  const url = `https://world.openfoodfacts.org/api/v3/product/${gtin}?fields=${OFF_FIELDS}`;
-  let r;
-  try { r = await fetch(url); } catch { throw new Error('Pas de connexion avec Open Food Facts.'); }
-  if (r.status === 429) throw new Error('Limite Open Food Facts atteinte (15 requêtes/min). Patientez une minute.');
-  if (r.status === 404) return { estado: 'no_encontrado' };
-  if (!r.ok) throw new Error(`Open Food Facts a répondu ${r.status}.`);
-  const j = await r.json();
-  if (!j.product) return { estado: 'no_encontrado' };
-  return { estado: 'encontrado', product: j.product };
+  for (const base of BASES) {
+    const product = await consultarBase(base, gtin);
+    if (product) return { estado: 'encontrado', product, base: base.id };
+  }
+  return { estado: 'no_encontrado' };
 }
 
 function componentesDesdeOFF(packagings = []) {
@@ -102,15 +113,22 @@ function componentesDesdeOFF(packagings = []) {
 
 function nuevoRegistro(gtin, res) {
   const p = res.product || {};
+  const ctx = db.prefs.contexto || {};
   return {
     gtin,
     categoria: db.prefs.categoria || CATEGORIAS[0].id,
+    libelle_ticket: '',
     nombre: p.product_name_fr || p.product_name || '',
     marca: p.brands || '',
     cantidad: p.quantity || '',
     imagen: p.image_front_small_url || '',
+    enseigne: ctx.enseigne || '',
+    commune: ctx.commune || '',
+    date_achat: ctx.fecha || '',
+    sin_envase: false,
     off: {
       estado: res.estado,
+      base: res.base || '',
       packagings_complete: p.packagings_complete ?? null,
       packagings: p.packagings || [],
       consultado: ahora(),
@@ -121,6 +139,7 @@ function nuevoRegistro(gtin, res) {
     clase_manual: '',
     causa: res.estado === 'no_encontrado' ? 'no_encontrado' : '',
     obs: '',
+    saisi_par: '',
     creado: ahora(),
     actualizado: ahora(),
     version_app: APP_VERSION,
@@ -135,6 +154,8 @@ function componentesRelevantes(r) {
 }
 
 function claseSugerida(r) {
+  // Sans emballage : rien à peser, la masse plastique est connue (0 g) une fois vérifiée.
+  if (r.sin_envase) return r.verificado ? 'A' : 'C';
   const c = r.componentes || [];
   if (!c.length || c.some((x) => !x.material)) return 'D';
   const rel = componentesRelevantes(r);
@@ -148,9 +169,80 @@ const claseFinal = (r) => r.clase_manual || claseSugerida(r);
 // Renseignée uniquement pour les classes A et B ; en C et D aucun gramme n'est attribué.
 function masaPlastico(r) {
   if (!['A', 'B'].includes(claseFinal(r))) return null;
+  if (r.sin_envase) return 0;
   return r.componentes
     .filter((c) => familiaDe(c.material) === 'plastico')
     .reduce((s, c) => s + (num(c.unidades) ?? 1) * (num(c.peso_g) ?? 0), 0);
+}
+
+// ---------- Lignes partagées par l'export CSV et la feuille Google ----------
+
+const COLS_REF = [
+  'mis_a_jour', 'saisi_par', 'gtin', 'libelle_ticket', 'nom', 'marque', 'quantite', 'rayon',
+  'enseigne', 'commune', 'date_achat', 'sans_emballage', 'base_produits', 'statut_off',
+  'off_emballages_complets', 'nb_composants', 'materiaux', 'formes', 'masse_plastique_g',
+  'classe_suggeree', 'classe_finale', 'verifie', 'donnees_off', 'cause', 'observations', 'version_app',
+];
+const COLS_COMP = [
+  'mis_a_jour', 'saisi_par', 'gtin', 'nom', 'rayon', 'composant', 'forme', 'materiau', 'famille',
+  'unites', 'poids_g', 'source_poids', 'consigne_tri', 'recyclage_off', 'origine',
+];
+const ORIGENES = { off: 'OFF', off_corregido: 'OFF corrigé', manual: 'Saisie manuelle' };
+const ouiNon = (b) => (b ? 'oui' : 'non');
+
+function filaRef(r) {
+  const m = masaPlastico(r);
+  return {
+    mis_a_jour: r.actualizado,
+    saisi_par: r.saisi_par || '',
+    gtin: r.gtin,
+    libelle_ticket: r.libelle_ticket || '',
+    nom: r.nombre,
+    marque: r.marca,
+    quantite: r.cantidad,
+    rayon: labelDe(CATEGORIAS, r.categoria),
+    enseigne: r.enseigne || '',
+    commune: r.commune || '',
+    date_achat: r.date_achat || '',
+    sans_emballage: ouiNon(r.sin_envase),
+    base_produits: labelDe(BASES, r.off.base),
+    statut_off: ESTADOS_OFF[r.off.estado] || r.off.estado,
+    off_emballages_complets: r.off.packagings_complete == null ? '' : ouiNon(r.off.packagings_complete),
+    nb_composants: r.componentes.length,
+    materiaux: r.componentes.map((c) => labelMaterial(c.material)).join(' + '),
+    formes: r.componentes.map((c) => labelForma(c.forma)).join(' + '),
+    masse_plastique_g: m == null ? '' : Math.round(m * 10) / 10,
+    classe_suggeree: claseSugerida(r),
+    classe_finale: claseFinal(r),
+    verifie: ouiNon(r.verificado),
+    donnees_off: r.exactitud_off ? labelDe(EXACTITUD, r.exactitud_off) : '',
+    cause: r.causa ? labelDe(CAUSAS, r.causa) : '',
+    observations: r.obs,
+    version_app: r.version_app,
+  };
+}
+
+function filasComp(r) {
+  return r.componentes.map((c, i) => {
+    const fam = familiaDe(c.material);
+    return {
+      mis_a_jour: r.actualizado,
+      saisi_par: r.saisi_par || '',
+      gtin: r.gtin,
+      nom: r.nombre,
+      rayon: labelDe(CATEGORIAS, r.categoria),
+      composant: i + 1,
+      forme: labelForma(c.forma),
+      materiau: labelMaterial(c.material),
+      famille: FAMILIAS[fam].label,
+      unites: num(c.unidades) ?? '',
+      poids_g: num(c.peso_g) ?? '',
+      source_poids: c.peso_fuente ? labelDe(PESO_FUENTES, c.peso_fuente) : '',
+      consigne_tri: consignaTri(fam).label,
+      recyclage_off: c.reciclaje_off,
+      origine: ORIGENES[c.origen] || c.origen,
+    };
+  });
 }
 
 // ---------- Onglets ----------
@@ -164,14 +256,39 @@ function mostrarTab(id) {
   if (id !== 'escanear') cerrarCamara();
 }
 
-// ---------- Recherche et caméra ----------
+// ---------- Contexte d'achat et rayon (mémorisés entre deux scans) ----------
+
+$('#enseignes').innerHTML = ENSEIGNES.map((e) => `<option value="${esc(e)}">`).join('');
+$('#communes').innerHTML = COMMUNES.map((c) => `<option value="${esc(c)}">`).join('');
+
+db.prefs.contexto ??= { enseigne: '', commune: '', fecha: hoy() };
+const CTX = { enseigne: '#ctx-enseigne', commune: '#ctx-commune', fecha: '#ctx-fecha' };
+for (const [k, sel] of Object.entries(CTX)) {
+  $(sel).value = db.prefs.contexto[k] || '';
+  $(sel).addEventListener('change', () => { db.prefs.contexto[k] = $(sel).value.trim(); guardar(); resumirContexto(); });
+}
+function resumirContexto() {
+  const c = db.prefs.contexto;
+  const partes = [c.enseigne, c.commune, c.fecha].filter(Boolean);
+  $('#contexto-resumen').textContent = partes.length ? `· ${partes.join(' · ')}` : '· à renseigner';
+}
+resumirContexto();
+if (!db.prefs.contexto.enseigne) $('#contexto').open = true;
 
 const selCat = $('#categoria');
 selCat.innerHTML = opciones(CATEGORIAS, db.prefs.categoria || CATEGORIAS[0].id);
 selCat.addEventListener('change', () => { db.prefs.categoria = selCat.value; guardar(); });
 
+// ---------- Recherche ----------
+
 $('#buscar').addEventListener('click', () => buscar($('#gtin').value));
 $('#gtin').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(e.target.value); });
+
+// UPC-A (12 chiffres) → EAN-13 avec un 0 initial, la forme utilisée par Open Food Facts.
+const normalizar = (texto) => {
+  const d = String(texto || '').replace(/\D/g, '');
+  return d.length === 12 ? `0${d}` : d;
+};
 
 let buscando = false;
 async function buscar(valor, { reconsultar = false } = {}) {
@@ -187,19 +304,20 @@ async function buscar(valor, { reconsultar = false } = {}) {
   }
   buscando = true;
   $('#buscar').disabled = true;
-  estado('Interrogation d’Open Food Facts…');
+  estado('Interrogation des bases Open Facts…');
   try {
     const res = await consultarOFF(gtin);
     if (reconsultar && db.refs[gtin]) {
       const r = structuredClone(db.refs[gtin]);
       const p = res.product || {};
-      r.off = { estado: res.estado, packagings_complete: p.packagings_complete ?? null, packagings: p.packagings || [], consultado: ahora() };
+      r.off = { estado: res.estado, base: res.base || '', packagings_complete: p.packagings_complete ?? null, packagings: p.packagings || [], consultado: ahora() };
       r.componentes = componentesDesdeOFF(p.packagings);
       r.verificado = false;
-      estado('Données OFF mises à jour. Vérifiez à nouveau puis enregistrez.');
+      estado('Données mises à jour. Vérifiez à nouveau puis enregistrez.');
       abrirEditor(r);
     } else {
-      estado(res.estado === 'encontrado' ? 'Produit trouvé. Vérifiez les emballages sur le produit physique.' : "Absent d'Open Food Facts. Décrivez les emballages à la main.");
+      const base = labelDe(BASES, res.base);
+      estado(res.estado === 'encontrado' ? `Trouvé dans ${base}. Vérifiez les emballages sur le produit physique.` : 'Absent des bases Open Facts. Décrivez les emballages à la main.');
       abrirEditor(nuevoRegistro(gtin, res));
     }
   } catch (e) {
@@ -209,6 +327,15 @@ async function buscar(valor, { reconsultar = false } = {}) {
     $('#buscar').disabled = false;
   }
 }
+
+// Produits sans code-barres (vrac, fruits et légumes, pain…) : identifiant interne « SC-… ».
+$('#sin-codigo').addEventListener('click', () => {
+  cerrarCamara();
+  const r = nuevoRegistro(`SC-${Date.now().toString(36).toUpperCase()}`, { estado: 'sin_codigo' });
+  $('#gtin').value = '';
+  estado('Produit sans code-barres : saisissez le nom et décrivez les emballages (ou cochez « sans emballage »).');
+  abrirEditor(r);
+});
 
 // ---------- Lecture du code-barres (caméra en direct ou photo) ----------
 
@@ -244,11 +371,6 @@ async function obtenerDetector() {
   return detector;
 }
 
-// UPC-A (12 chiffres) → EAN-13 avec un 0 initial, la forme utilisée par Open Food Facts.
-const normalizar = (texto) => {
-  const d = String(texto || '').replace(/\D/g, '');
-  return d.length === 12 ? `0${d}` : d;
-};
 const codigoLeido = (resultados) => resultados.map((r) => normalizar(r.rawValue)).find(gtinValido);
 
 function mensajeCamara(e) {
@@ -369,8 +491,13 @@ function pintarEditor() {
   const ed = $('#editor');
   if (!r) { ed.innerHTML = ''; return; }
   const enOFF = r.off.estado === 'encontrado';
+  const sinCodigo = r.off.estado === 'sin_codigo';
+  const base = BASES.find((b) => b.id === r.off.base) || BASES[0];
   const completo = r.off.packagings_complete;
   const yaGuardado = !!db.refs[r.gtin];
+  const insignia = enOFF
+    ? `<span class="badge good">Dans ${esc(base.label)}</span>`
+    : sinCodigo ? '<span class="badge">Sans code-barres</span>' : '<span class="badge bad">Introuvable dans les bases Open Facts</span>';
 
   ed.innerHTML = `
     <div class="card">
@@ -379,11 +506,11 @@ function pintarEditor() {
         <div class="meta">
           <div class="gtin">${esc(r.gtin)}</div>
           <div>
-            <span class="badge ${enOFF ? 'good' : 'bad'}">${enOFF ? 'Dans Open Food Facts' : 'Introuvable dans OFF'}</span>
-            ${enOFF ? `<span class="badge ${completo ? '' : 'warn'}">${completo ? 'OFF : emballages marqués complets' : 'OFF : emballages incomplets'}</span>` : ''}
-            <span class="badge">${r.off.packagings.length} comp. dans OFF</span>
+            ${insignia}
+            ${enOFF ? `<span class="badge ${completo ? '' : 'warn'}">${completo ? 'Emballages marqués complets' : 'Emballages incomplets'}</span>` : ''}
+            ${enOFF ? `<span class="badge">${r.off.packagings.length} comp. dans la base</span>` : ''}
           </div>
-          ${enOFF ? `<a class="note" href="https://world.openfoodfacts.org/product/${esc(r.gtin)}" target="_blank" rel="noopener">Voir la fiche Open Food Facts</a>` : ''}
+          ${enOFF ? `<a class="note" href="https://${base.host}/product/${esc(r.gtin)}" target="_blank" rel="noopener">Voir la fiche ${esc(base.label)}</a>` : ''}
         </div>
       </div>
     </div>
@@ -394,23 +521,32 @@ function pintarEditor() {
         <label class="field">Nom / variante<input data-k="nombre" value="${esc(r.nombre)}"></label>
         <label class="field">Marque<input data-k="marca" value="${esc(r.marca)}"></label>
         <label class="field">Quantité<input data-k="cantidad" value="${esc(r.cantidad)}" placeholder="ex. 1,5 L"></label>
-        <label class="field">Catégorie<select data-k="categoria">${opciones(CATEGORIAS, r.categoria)}</select></label>
+        <label class="field">Rayon<select data-k="categoria">${opciones(CATEGORIAS, r.categoria)}</select></label>
+      </div>
+      <label class="field">Libellé sur le ticket<input data-k="libelle_ticket" value="${esc(r.libelle_ticket)}" placeholder="ex. FROM BIL MOZZA CRF"></label>
+      <div class="grid">
+        <label class="field">Enseigne<input data-k="enseigne" list="enseignes" value="${esc(r.enseigne)}"></label>
+        <label class="field">Commune<input data-k="commune" list="communes" value="${esc(r.commune)}"></label>
+        <label class="field">Date d'achat<input data-k="date_achat" type="date" value="${esc(r.date_achat)}"></label>
       </div>
     </div>
 
     <div class="card">
       <h3>Composants de l'emballage</h3>
-      <p class="note">Chaque ligne est un composant d'une unité de vente (bouteille, bouchon, étiquette…). Le poids s'entend par unité de composant.</p>
-      <div id="comps">${r.componentes.map(pintarComponente).join('') || '<p class="vacio">Aucun composant. Ajoutez ceux que vous observez sur le produit.</p>'}</div>
-      <button type="button" id="add-comp" class="secondary wide">Ajouter un composant</button>
-      <p class="note">Consignes de tri : ${esc(FUENTE_TRI)}</p>
+      <label class="check"><input type="checkbox" data-k="sin_envase" ${r.sin_envase ? 'checked' : ''}> Produit vendu sans emballage (vrac)</label>
+      <div id="bloque-comps" ${r.sin_envase ? 'hidden' : ''}>
+        <p class="note">Chaque ligne est un composant d'une unité de vente (bouteille, bouchon, étiquette…). Le poids s'entend par unité de composant.</p>
+        <div id="comps">${r.componentes.map(pintarComponente).join('') || '<p class="vacio">Aucun composant. Ajoutez ceux que vous observez sur le produit.</p>'}</div>
+        <button type="button" id="add-comp" class="secondary wide">Ajouter un composant</button>
+        <p class="note">Consignes de tri : ${esc(FUENTE_TRI)}</p>
+      </div>
     </div>
 
     <div class="card">
       <h3>Vérification et qualité</h3>
       <label class="check"><input type="checkbox" data-k="verificado" ${r.verificado ? 'checked' : ''}> Emballages vérifiés sur le produit physique</label>
       <div class="grid">
-        <label class="field">Données OFF sur les emballages<select data-k="exactitud_off">${opciones(EXACTITUD, r.exactitud_off)}</select></label>
+        <label class="field">Données de la base sur les emballages<select data-k="exactitud_off">${opciones(EXACTITUD, r.exactitud_off)}</select></label>
         <label class="field">Cause d'absence / problème<select data-k="causa">${opciones(CAUSAS, r.causa)}</select></label>
       </div>
       <div class="row" style="align-items:center;margin-bottom:10px">
@@ -429,7 +565,7 @@ function pintarEditor() {
       <label class="field">Observations<textarea data-k="obs" placeholder="Ce qui ne correspondait pas, méthode de pesée, photo prise…">${esc(r.obs)}</textarea></label>
       <div class="actions">
         <button type="button" id="guardar" class="primary">Enregistrer la référence</button>
-        ${yaGuardado && enOFF ? '<button type="button" id="reconsultar" class="secondary">Réinterroger OFF</button>' : ''}
+        ${yaGuardado && enOFF ? '<button type="button" id="reconsultar" class="secondary">Réinterroger la base</button>' : ''}
         <button type="button" id="descartar" class="ghost">${yaGuardado ? 'Fermer' : 'Abandonner'}</button>
       </div>
     </div>`;
@@ -455,6 +591,7 @@ function pintarComponente(c, i) {
 function refrescarDerivados() {
   const r = actual;
   if (!r) return;
+  $('#bloque-comps').hidden = !!r.sin_envase;
   document.querySelectorAll('#comps .comp').forEach((el) => {
     const c = r.componentes[Number(el.dataset.i)];
     const fam = familiaDe(c.material);
@@ -503,9 +640,14 @@ $('#editor').addEventListener('click', (e) => {
     actual.componentes.splice(Number(t.dataset.del), 1);
     pintarEditor();
   } else if (t.id === 'guardar') {
+    if (actual.off.estado === 'sin_codigo' && !actual.nombre.trim()) return toast('Donnez un nom au produit sans code-barres.');
+    if (actual.sin_envase) actual.componentes = [];
     actual.actualizado = ahora();
     actual.version_app = APP_VERSION;
-    db.refs[actual.gtin] = actual;
+    actual.saisi_par ||= db.prefs.nombre || '';
+    actual.sync = 'pendiente';
+    const gtin = actual.gtin;
+    db.refs[gtin] = actual;
     guardar();
     contar();
     toast(`Enregistré · classe ${claseFinal(actual)}`);
@@ -513,6 +655,7 @@ $('#editor').addEventListener('click', (e) => {
     pintarEditor();
     $('#gtin').value = '';
     estado(`${Object.keys(db.refs).length} référence(s) dans l'inventaire.`);
+    sincronizar([gtin]);
   } else if (t.id === 'reconsultar') {
     buscar(actual.gtin, { reconsultar: true });
   } else if (t.id === 'descartar') {
@@ -522,6 +665,82 @@ $('#editor').addEventListener('click', (e) => {
   }
 });
 
+// ---------- Synchronisation avec Google Sheets (Apps Script) ----------
+
+const syncConfigurado = () => !!(db.prefs.sync_url && db.prefs.sync_cle);
+const pendientes = () => Object.values(db.refs).filter((r) => r.sync !== 'ok');
+
+function resumirSync() {
+  const n = pendientes().length;
+  $('#sync-resumen').textContent = !syncConfigurado()
+    ? '· non configurée'
+    : n ? `· ${n} en attente` : '· à jour';
+}
+
+$('#cfg-nombre').value = db.prefs.nombre || '';
+$('#cfg-url').value = db.prefs.sync_url || '';
+$('#cfg-cle').value = db.prefs.sync_cle || '';
+if (!syncConfigurado()) $('#sync-card').open = true;
+
+$('#cfg-guardar').addEventListener('click', async () => {
+  db.prefs.nombre = $('#cfg-nombre').value.trim();
+  db.prefs.sync_url = $('#cfg-url').value.trim();
+  db.prefs.sync_cle = $('#cfg-cle').value.trim();
+  guardar();
+  resumirSync();
+  if (!syncConfigurado()) { $('#sync-estado').textContent = 'Renseignez l’URL et la clé.'; return; }
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(db.prefs.sync_url)) {
+    $('#sync-estado').textContent = 'L’URL doit commencer par https://script.google.com/macros/s/ et finir par /exec.';
+    return;
+  }
+  $('#sync-estado').textContent = 'Test de la connexion…';
+  try {
+    const r = await fetch(`${db.prefs.sync_url}?cle=${encodeURIComponent(db.prefs.sync_cle)}`);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.erreur || 'refusé');
+    $('#sync-estado').textContent = `Connecté à « ${j.feuille} ». Envoi des références en attente…`;
+    await sincronizar();
+  } catch (e) {
+    $('#sync-estado').textContent = `Échec de la connexion : ${e.message}. Vérifiez l’URL (déploiement « Tout le monde ») et la clé.`;
+  }
+});
+
+$('#sync-todo').addEventListener('click', () => sincronizar());
+
+let sincronizando = false;
+async function sincronizar(gtins) {
+  if (!syncConfigurado() || sincronizando || !navigator.onLine) { resumirSync(); return; }
+  const lista = (gtins ? gtins.map((g) => db.refs[g]).filter(Boolean) : pendientes());
+  if (!lista.length) { resumirSync(); if (!gtins) $('#sync-estado').textContent = 'Tout est déjà dans la feuille.'; return; }
+  sincronizando = true;
+  let enviadas = 0;
+  try {
+    // Lots de 25 : une requête Apps Script reste sous quelques secondes.
+    for (let i = 0; i < lista.length; i += 25) {
+      const lote = lista.slice(i, i + 25);
+      const r = await fetch(db.prefs.sync_url, {
+        method: 'POST',
+        body: JSON.stringify({ cle: db.prefs.sync_cle, refs: lote.map((x) => ({ ref: filaRef(x), composants: filasComp(x) })) }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.erreur || 'refusé');
+      lote.forEach((x) => { if (db.refs[x.gtin] === x) x.sync = 'ok'; });
+      enviadas += lote.length;
+      guardar();
+    }
+    $('#sync-estado').textContent = `${enviadas} référence(s) envoyée(s) à la feuille.`;
+    if (gtins) toast('Envoyé à la feuille Google.');
+  } catch (e) {
+    $('#sync-estado').textContent = `Envoi interrompu (${e.message}). Les références restent en attente.`;
+    if (gtins) toast('Pas envoyé à la feuille : la référence reste en attente.');
+  } finally {
+    sincronizando = false;
+    resumirSync();
+    if ($('#tab-inventario').classList.contains('active')) pintarLista();
+  }
+}
+window.addEventListener('online', () => sincronizar());
+
 // ---------- Inventaire ----------
 
 function contar() { $('#count').textContent = Object.keys(db.refs).length; }
@@ -530,86 +749,65 @@ $('#filtro').addEventListener('input', pintarLista);
 function pintarLista() {
   const q = $('#filtro').value.trim().toLowerCase();
   const refs = Object.values(db.refs)
-    .filter((r) => !q || `${r.nombre} ${r.marca} ${r.gtin}`.toLowerCase().includes(q))
+    .filter((r) => !q || `${r.nombre} ${r.marca} ${r.gtin} ${r.libelle_ticket || ''}`.toLowerCase().includes(q))
     .sort((a, b) => b.actualizado.localeCompare(a.actualizado));
+  const conSync = syncConfigurado();
   $('#lista').innerHTML = refs.length
     ? refs.map((r) => {
       const k = claseFinal(r);
+      const s = !conSync ? '' : r.sync === 'ok' ? ' · <span class="ok-sync">dans la feuille</span>' : ' · <span class="pend-sync">en attente</span>';
       return `<li data-gtin="${esc(r.gtin)}">
         <span class="clase clase-${k}">${k}</span>
         <div class="info"><strong>${esc(r.nombre || 'Sans nom')}</strong>
-          <span>${esc(r.marca)} · ${esc(labelDe(CATEGORIAS, r.categoria))} · ${r.componentes.length} comp.${r.verificado ? ' · vérifié' : ''}</span></div>
+          <span>${esc(r.marca)}${r.marca ? ' · ' : ''}${esc(labelDe(CATEGORIAS, r.categoria))} · ${r.sin_envase ? 'vrac' : `${r.componentes.length} comp.`}${r.verificado ? ' · vérifié' : ''}${s}</span></div>
       </li>`;
     }).join('')
     : '<li class="vacio" style="cursor:default;display:block">Aucune référence pour l’instant. Scannez le premier produit.</li>';
+  resumirSync();
 }
 
 $('#lista').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-gtin]');
   if (!li) return;
   mostrarTab('escanear');
-  $('#gtin').value = li.dataset.gtin;
+  $('#gtin').value = li.dataset.gtin.startsWith('SC-') ? '' : li.dataset.gtin;
   abrirEditor(structuredClone(db.refs[li.dataset.gtin]));
 });
 
 $('#borrar-todo').addEventListener('click', () => {
   const n = Object.keys(db.refs).length;
   if (!n) return;
-  if (!confirm(`Effacer les ${n} références de ce navigateur ? Exportez d'abord une sauvegarde JSON si nécessaire.`)) return;
+  if (!confirm(`Effacer les ${n} références de ce téléphone ? La feuille Google n'est pas modifiée. Exportez d'abord une sauvegarde JSON si nécessaire.`)) return;
   db.refs = {};
   guardar();
   contar();
   pintarLista();
 });
 
-// ---------- Export (séparateur ';' et BOM pour Excel en français) ----------
+// ---------- Export (séparateur ';', virgule décimale et BOM pour Excel en français) ----------
 
 function csv(filas) {
   const celda = (v) => {
-    const s = v == null ? '' : String(v);
+    const s = v == null ? '' : typeof v === 'number' ? String(v).replace('.', ',') : String(v);
     return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return '﻿' + filas.map((f) => f.map(celda).join(';')).join('\r\n');
 }
-const fecha = () => new Date().toISOString().slice(0, 10);
-const decimal = (n) => (n == null ? '' : String(Math.round(n * 10) / 10).replace('.', ','));
 
 $('#exp-ref').addEventListener('click', () => {
-  const filas = [[
-    'gtin', 'categorie', 'nom', 'marque', 'quantite', 'statut_off', 'off_emballages_complets', 'nb_composants_off',
-    'nb_composants', 'materiaux', 'formes', 'masse_plastique_g', 'classe_suggeree', 'classe_finale', 'verifie',
-    'donnees_off', 'cause', 'observations', 'requete_off', 'mis_a_jour',
-  ]];
-  for (const r of Object.values(db.refs)) {
-    filas.push([
-      r.gtin, labelDe(CATEGORIAS, r.categoria), r.nombre, r.marca, r.cantidad, ESTADOS_OFF[r.off.estado] || r.off.estado,
-      r.off.packagings_complete == null ? '' : (r.off.packagings_complete ? 'oui' : 'non'), r.off.packagings.length,
-      r.componentes.length, r.componentes.map((c) => labelMaterial(c.material)).join(' + '),
-      r.componentes.map((c) => labelForma(c.forma)).join(' + '), decimal(masaPlastico(r)), claseSugerida(r), claseFinal(r),
-      r.verificado ? 'oui' : 'non', r.exactitud_off ? labelDe(EXACTITUD, r.exactitud_off) : '',
-      r.causa ? labelDe(CAUSAS, r.causa) : '', r.obs, r.off.consultado, r.actualizado,
-    ]);
-  }
-  descargar(`resser_testA_references_${fecha()}.csv`, csv(filas), 'text/csv;charset=utf-8');
+  const filas = [COLS_REF, ...Object.values(db.refs).map((r) => { const o = filaRef(r); return COLS_REF.map((c) => o[c]); })];
+  descargar(`resser_testA_references_${hoy()}.csv`, csv(filas), 'text/csv;charset=utf-8');
 });
 
 $('#exp-comp').addEventListener('click', () => {
-  const filas = [['gtin', 'nom', 'composant', 'forme', 'materiau', 'famille', 'unites', 'poids_g', 'source_poids', 'consigne_tri', 'recyclage_off', 'origine']];
-  const origenes = { off: 'OFF', off_corregido: 'OFF corrigé', manual: 'Saisie manuelle' };
-  for (const r of Object.values(db.refs)) {
-    r.componentes.forEach((c, i) => {
-      const fam = familiaDe(c.material);
-      filas.push([r.gtin, r.nombre, i + 1, labelForma(c.forma), labelMaterial(c.material), FAMILIAS[fam].label,
-        c.unidades, decimal(num(c.peso_g)), c.peso_fuente ? labelDe(PESO_FUENTES, c.peso_fuente) : '',
-        consignaTri(fam).label, c.reciclaje_off, origenes[c.origen] || c.origen]);
-    });
-  }
-  descargar(`resser_testA_composants_${fecha()}.csv`, csv(filas), 'text/csv;charset=utf-8');
+  const filas = [COLS_COMP];
+  Object.values(db.refs).forEach((r) => filasComp(r).forEach((o) => filas.push(COLS_COMP.map((c) => o[c]))));
+  descargar(`resser_testA_composants_${hoy()}.csv`, csv(filas), 'text/csv;charset=utf-8');
 });
 
 $('#exp-json').addEventListener('click', () => {
   const datos = { app: 'resser-testA', version: APP_VERSION, exportado: ahora(), refs: db.refs };
-  descargar(`resser_testA_sauvegarde_${fecha()}.json`, JSON.stringify(datos, null, 2), 'application/json');
+  descargar(`resser_testA_sauvegarde_${hoy()}.json`, JSON.stringify(datos, null, 2), 'application/json');
 });
 
 // L'import fusionne par GTIN : la version mise à jour le plus récemment l'emporte.
@@ -623,6 +821,7 @@ $('#imp-json').addEventListener('change', async (e) => {
     let nuevas = 0, actualizadas = 0;
     for (const [gtin, r] of Object.entries(datos.refs)) {
       if (!r?.gtin || !Array.isArray(r.componentes) || !r.off) continue;
+      if (ALIAS_CATEGORIAS[r.categoria]) r.categoria = ALIAS_CATEGORIAS[r.categoria];
       const previa = db.refs[gtin];
       if (!previa) { db.refs[gtin] = r; nuevas++; }
       else if ((r.actualizado || '') > (previa.actualizado || '')) { db.refs[gtin] = r; actualizadas++; }
@@ -677,6 +876,7 @@ function pintarResumen() {
     consignas[t] = (consignas[t] || 0) + u;
   }));
   const totalU = Object.values(unidadesFam).reduce((s, v) => s + v, 0);
+  const vrac = refs.filter((r) => r.sin_envase).length;
 
   const masas = refs.map(masaPlastico).filter((m) => m != null);
   const media = masas.length ? masas.reduce((s, v) => s + v, 0) / masas.length : null;
@@ -687,8 +887,9 @@ function pintarResumen() {
 
   const filasCat = CATEGORIAS.map((c) => {
     const sub = indicadores(refs.filter((r) => r.categoria === c.id));
-    return `<tr><td>${esc(c.label)}</td><td class="num">${sub.n}</td><td class="num">${sub.n ? pct(sub.encontrados, sub.n) + ' %' : '—'}</td>
-      <td class="num">${sub.n ? pct(sub.material, sub.n) + ' %' : '—'}</td><td class="num">${sub.n ? pct(sub.masa, sub.n) + ' %' : '—'}</td></tr>`;
+    if (!sub.n) return '';
+    return `<tr><td>${esc(c.label)}</td><td class="num">${sub.n}</td><td class="num">${pct(sub.encontrados, sub.n)} %</td>
+      <td class="num">${pct(sub.material, sub.n)} %</td><td class="num">${pct(sub.masa, sub.n)} %</td></tr>`;
   }).join('');
 
   const filasFam = Object.entries(unidadesFam).sort((a, b) => b[1] - a[1])
@@ -699,23 +900,23 @@ function pintarResumen() {
   el.innerHTML = `
     ${I.n < 10 ? `<div class="card note">Seulement ${I.n} référence(s) : les pourcentages sont encore très instables. Le premier jalon du plan est de 10 produits.</div>` : ''}
     <div class="kpis">
-      ${kpi('Couverture produit', I.encontrados, I.n, METAS.producto)}
+      ${kpi('Couverture produit (trouvés dans une base)', I.encontrados, I.n, METAS.producto)}
       ${kpi('Couverture matériau (classes A–C)', I.material, I.n, METAS.material)}
       ${kpi('Couverture masse (classes A–B)', I.masa, I.n, METAS.masa)}
-      ${kpi('Données OFF correctes (réf. évaluées)', correctas, evaluadas.length, null)}
+      ${kpi('Données de la base correctes (réf. évaluées)', correctas, evaluadas.length, null)}
     </div>
 
     <div class="card" style="margin-top:14px">
       <h3>Classes de qualité</h3>
       <div class="bar">${barraClases}</div>
-      <p class="note">${I.verificados} référence(s) sur ${I.n} vérifiée(s) physiquement.</p>
+      <p class="note">${I.verificados} référence(s) sur ${I.n} vérifiée(s) physiquement · ${vrac} vendue(s) sans emballage.</p>
       <p class="note">${media == null ? 'Aucune référence avec une masse plastique quantifiée pour l’instant.' : `Masse plastique moyenne (classes A–B, n = ${masas.length}) : ${g1(media)} g par unité de vente.`}</p>
     </div>
 
     <div class="card">
-      <h3>Par catégorie</h3>
+      <h3>Par rayon</h3>
       <div class="tabla"><table>
-        <thead><tr><th>Catégorie</th><th class="num">n</th><th class="num">Produit</th><th class="num">Matériau</th><th class="num">Masse</th></tr></thead>
+        <thead><tr><th>Rayon</th><th class="num">n</th><th class="num">Produit</th><th class="num">Matériau</th><th class="num">Masse</th></tr></thead>
         <tbody>${filasCat}</tbody>
       </table></div>
     </div>
@@ -736,6 +937,8 @@ function pintarResumen() {
 // ---------- Démarrage ----------
 
 contar();
+resumirSync();
+if (syncConfigurado() && pendientes().length) sincronizar();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

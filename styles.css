@@ -95,6 +95,10 @@ button, .button {
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 button:disabled { opacity: .5; cursor: default; }
 
+details.card > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::before { content: '▸'; color: var(--muted); }
+details.card[open] > summary::before { content: '▾'; }
 .row.scan { margin-top: 10px; }
 .row.scan > * { flex: 1; }
 .visor { position: relative; margin-top: 10px; border-radius: 8px; overflow: hidden; background: #000; }
@@ -143,6 +147,8 @@ button:disabled { opacity: .5; cursor: default; }
 .lista .info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lista .info span { color: var(--muted); font-size: 13px; }
 .vacio { text-align: center; color: var(--muted); padding: 24px 0; }
+.ok-sync { color: var(--good); }
+.pend-sync { color: var(--warn); }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }

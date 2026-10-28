@@ -3,12 +3,43 @@
 // Un identifiant inconnu est conservé tel quel et rattaché à une famille par familiaDe().
 // Les identifiants internes (catégories, sources, causes) restent stables pour garder la compatibilité des sauvegardes.
 
+// Rayons du magasin (alignés sur la feuille « data base » de l'équipe).
 export const CATEGORIAS = [
-  { id: 'bebidas', label: 'Boissons' },
-  { id: 'lacteos', label: 'Produits laitiers' },
-  { id: 'snacks', label: 'Snacks' },
-  { id: 'conservas', label: 'Conserves' },
-  { id: 'otros', label: 'Autres aliments' },
+  { id: 'cremerie', label: 'Crèmerie' },
+  { id: 'fromagerie', label: 'Fromagerie' },
+  { id: 'charcuterie', label: 'Charcuterie / traiteur' },
+  { id: 'boucherie', label: 'Boucherie / poissonnerie' },
+  { id: 'fruits_legumes', label: 'Fruits et légumes' },
+  { id: 'boulangerie', label: 'Boulangerie / viennoiserie' },
+  { id: 'epicerie_salee', label: 'Épicerie salée' },
+  { id: 'epicerie_sucree', label: 'Épicerie sucrée' },
+  { id: 'boissons', label: 'Boissons' },
+  { id: 'surgeles', label: 'Surgelés' },
+  { id: 'hygiene', label: 'Hygiène / beauté' },
+  { id: 'entretien', label: 'Entretien / maison' },
+  { id: 'animaux', label: 'Animaux' },
+  { id: 'autre', label: 'Autre' },
+];
+// Catégories des versions ≤ 0.3 → rayon équivalent.
+export const ALIAS_CATEGORIAS = {
+  bebidas: 'boissons', lacteos: 'cremerie', snacks: 'epicerie_sucree', conservas: 'epicerie_salee', otros: 'autre',
+};
+
+export const COMMUNES = [
+  'Art-sur-Meurthe', 'Dommartemont', 'Essey-lès-Nancy', 'Fléville-devant-Nancy', 'Heillecourt', 'Houdemont',
+  'Jarville-la-Malgrange', 'Laneuveville-devant-Nancy', 'Laxou', 'Ludres', 'Malzéville', 'Maxéville', 'Nancy',
+  'Pulnoy', 'Saint-Max', 'Saulxures-lès-Nancy', 'Seichamps', 'Tomblaine', 'Vandœuvre-lès-Nancy', 'Villers-lès-Nancy',
+];
+export const ENSEIGNES = [
+  'Carrefour', 'Carrefour Market', 'Carrefour City', 'E.Leclerc', 'Auchan', 'Intermarché', 'Super U', 'Cora',
+  'Lidl', 'Aldi', 'Monoprix', 'Franprix', 'Biocoop', 'Marché',
+];
+
+// Bases Open Facts interrogées dans l'ordre (même API v3).
+export const BASES = [
+  { id: 'off', label: 'Open Food Facts', host: 'world.openfoodfacts.org' },
+  { id: 'obf', label: 'Open Beauty Facts', host: 'world.openbeautyfacts.org' },
+  { id: 'opf', label: 'Open Products Facts', host: 'world.openproductsfacts.org' },
 ];
 
 export const FAMILIAS = {
@@ -93,7 +124,7 @@ export const CAUSAS = [
   { id: 'otra', label: 'Autre (voir observations)' },
 ];
 
-export const ESTADOS_OFF = { encontrado: 'Trouvé', no_encontrado: 'Introuvable' };
+export const ESTADOS_OFF = { encontrado: 'Trouvé', no_encontrado: 'Introuvable', sin_codigo: 'Sans code-barres' };
 
 const porId = (lista) => Object.fromEntries(lista.map((x) => [x.id, x]));
 const MAT = porId(MATERIALES);

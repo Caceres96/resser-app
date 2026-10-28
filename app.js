@@ -3,10 +3,12 @@ import {
   familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
 } from './reglas.js';
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 const KEY = 'resser.pruebaA.v1'; // clé inchangée pour conserver les données déjà saisies
 const OFF_FIELDS = 'code,product_name,product_name_fr,brands,quantity,packagings,packagings_complete,image_front_small_url';
-const LIB_LECTOR = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+// Lecteur de secours (zxing-cpp en WebAssembly) quand le navigateur n'a pas de BarcodeDetector natif (iPhone, Firefox…).
+const LIB_LECTOR = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.0/dist/iife/ponyfill.js';
+const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 // Seuils exploratoires du plan de faisabilité (section 06).
 const METAS = { producto: 0.85, material: 0.70, masa: 0.50 };
 
@@ -173,7 +175,7 @@ $('#gtin').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(e.
 
 let buscando = false;
 async function buscar(valor, { reconsultar = false } = {}) {
-  const gtin = String(valor || '').replace(/\D/g, '');
+  const gtin = normalizar(valor);
   if (!gtin) return estado('Saisissez ou scannez un code.');
   if (buscando) return;
   if (!gtinValido(gtin)) toast('La clé de contrôle ne correspond pas : vérifiez le code.');
@@ -208,58 +210,149 @@ async function buscar(valor, { reconsultar = false } = {}) {
   }
 }
 
-let lector = null;
-function cargarLibLector() {
+// ---------- Lecture du code-barres (caméra en direct ou photo) ----------
+
+let detector = null;
+let motor = '';
+
+function cargarScript(src) {
   return new Promise((ok, ko) => {
-    if (window.Html5Qrcode) return ok();
     const s = document.createElement('script');
-    s.src = LIB_LECTOR;
+    s.src = src;
     s.onload = ok;
     s.onerror = () => ko(new Error('Impossible de charger le lecteur de codes (hors connexion ?).'));
     document.head.append(s);
   });
 }
 
+// Détecteur natif s'il lit l'EAN-13 (Chrome Android), sinon zxing-cpp en WebAssembly.
+async function obtenerDetector() {
+  if (detector) return detector;
+  if ('BarcodeDetector' in window) {
+    try {
+      const soportados = await window.BarcodeDetector.getSupportedFormats();
+      if (soportados.includes('ean_13')) {
+        detector = new window.BarcodeDetector({ formats: FORMATOS.filter((f) => soportados.includes(f)) });
+        motor = 'natif';
+        return detector;
+      }
+    } catch { /* on passe au lecteur de secours */ }
+  }
+  if (!window.BarcodeDetectionAPI) await cargarScript(LIB_LECTOR);
+  detector = new window.BarcodeDetectionAPI.BarcodeDetector({ formats: FORMATOS });
+  motor = 'zxing';
+  return detector;
+}
+
+// UPC-A (12 chiffres) → EAN-13 avec un 0 initial, la forme utilisée par Open Food Facts.
+const normalizar = (texto) => {
+  const d = String(texto || '').replace(/\D/g, '');
+  return d.length === 12 ? `0${d}` : d;
+};
+const codigoLeido = (resultados) => resultados.map((r) => normalizar(r.rawValue)).find(gtinValido);
+
+function mensajeCamara(e) {
+  const n = e?.name || '';
+  if (!navigator.mediaDevices?.getUserMedia) return 'La caméra exige une page en HTTPS. Utilisez « Photo du code » ou saisissez le code.';
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, ou utilisez « Photo du code ».';
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'Aucune caméra disponible. Utilisez « Photo du code » ou saisissez le code.';
+  if (n === 'NotReadableError') return 'La caméra est utilisée par une autre application. Fermez-la puis réessayez.';
+  return e?.message || String(e);
+}
+
+let flujo = null;
+let ciclo = 0;
+let linterna = false;
+
 $('#camara').addEventListener('click', abrirCamara);
 $('#cerrar-camara').addEventListener('click', cerrarCamara);
 
 async function abrirCamara() {
+  const id = ++ciclo;
   try {
-    await cargarLibLector();
-    const F = window.Html5QrcodeSupportedFormats;
-    $('#lector').hidden = false;
-    $('#camara').hidden = true;
-    lector = new window.Html5Qrcode('reader', {
-      formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E],
-      verbose: false,
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    estado('Préparation du lecteur…');
+    const det = await obtenerDetector();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
     });
-    await lector.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: (w, h) => ({ width: Math.max(120, Math.min(w * 0.85, 320)), height: Math.max(60, Math.min(h * 0.45, 150)) }) },
-      (texto) => {
-        const code = texto.replace(/\D/g, '');
-        if (!gtinValido(code)) return; // lecture partielle : continuer à scanner
-        if (navigator.vibrate) navigator.vibrate(80);
-        cerrarCamara();
-        buscar(code);
-      },
-      () => {},
-    );
-    estado('Visez le code-barres.');
+    if (id !== ciclo) { stream.getTracks().forEach((t) => t.stop()); return; }
+    flujo = stream;
+    const video = $('#video');
+    video.srcObject = flujo;
+    await video.play();
+    $('#lector').hidden = false;
+    $('#botones-scan').hidden = true;
+
+    const pista = flujo.getVideoTracks()[0];
+    const cap = pista.getCapabilities?.() || {};
+    if (cap.focusMode?.includes('continuous')) pista.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+    linterna = false;
+    $('#linterna').hidden = !cap.torch;
+    estado(`Placez le code-barres dans le cadre, à 10–20 cm, bien éclairé. (lecteur ${motor})`);
+
+    // Deux lectures identiques de suite avant d'accepter un code, pour écarter les lectures erronées.
+    let ultimo = '', repeticiones = 0;
+    const paso = async () => {
+      if (id !== ciclo) return;
+      if (video.readyState >= 2) {
+        try {
+          const code = codigoLeido(await det.detect(video));
+          if (id !== ciclo) return;
+          if (code) {
+            repeticiones = code === ultimo ? repeticiones + 1 : 1;
+            ultimo = code;
+            if (repeticiones >= 2) {
+              if (navigator.vibrate) navigator.vibrate(80);
+              cerrarCamara();
+              buscar(code);
+              return;
+            }
+          }
+        } catch { /* image non exploitable : on continue */ }
+      }
+      setTimeout(paso, 120);
+    };
+    paso();
   } catch (e) {
     cerrarCamara();
-    estado(/Permission|NotAllowed/i.test(String(e)) ? 'Accès à la caméra refusé. Saisissez le code à la main.' : (e.message || String(e)));
+    estado(mensajeCamara(e));
   }
 }
 
-async function cerrarCamara() {
-  const l = lector;
-  lector = null;
+function cerrarCamara() {
+  ciclo++;
+  if (flujo) { flujo.getTracks().forEach((t) => t.stop()); flujo = null; }
+  $('#video').srcObject = null;
   $('#lector').hidden = true;
-  $('#camara').hidden = false;
-  if (l) { try { await l.stop(); l.clear(); } catch { /* déjà arrêté */ } }
+  $('#botones-scan').hidden = false;
 }
+
+$('#linterna').addEventListener('click', async () => {
+  const pista = flujo?.getVideoTracks()[0];
+  if (!pista) return;
+  linterna = !linterna;
+  try { await pista.applyConstraints({ advanced: [{ torch: linterna }] }); } catch { linterna = false; }
+});
+
+// Photo prise avec l'appareil photo du téléphone : autofocus et pleine résolution, souvent plus fiable en magasin.
+$('#foto').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  estado('Lecture de la photo…');
+  try {
+    const det = await obtenerDetector();
+    const img = await createImageBitmap(f);
+    const code = codigoLeido(await det.detect(img));
+    img.close?.();
+    if (code) buscar(code);
+    else estado('Aucun code-barres détecté. Reprenez la photo plus près, nette, le code bien à plat et éclairé.');
+  } catch (err) {
+    estado(`Impossible de lire la photo : ${err?.message || err}`);
+  }
+});
 
 // ---------- Éditeur d'une référence ----------
 

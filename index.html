@@ -33,10 +33,16 @@
           <input id="gtin" inputmode="numeric" autocomplete="off" placeholder="Code-barres (EAN-13, EAN-8…)">
           <button id="buscar" type="button" class="primary">Rechercher</button>
         </div>
-        <button id="camara" type="button" class="secondary wide">Scanner avec la caméra</button>
+        <div id="botones-scan" class="row scan">
+          <button id="camara" type="button" class="secondary">Scanner avec la caméra</button>
+          <label class="button secondary">Photo du code<input id="foto" type="file" accept="image/*" capture="environment" hidden></label>
+        </div>
         <div id="lector" hidden>
-          <div id="reader"></div>
-          <button id="cerrar-camara" type="button" class="ghost wide">Fermer la caméra</button>
+          <div class="visor"><video id="video" playsinline muted></video><div class="mira"></div></div>
+          <div class="row scan">
+            <button id="linterna" type="button" class="secondary" hidden>Lampe</button>
+            <button id="cerrar-camara" type="button" class="ghost">Fermer la caméra</button>
+          </div>
         </div>
         <p id="estado" class="muted" role="status"></p>
       </div>

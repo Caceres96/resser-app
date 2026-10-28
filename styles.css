@@ -31,6 +31,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -94,8 +95,16 @@ button, .button {
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 button:disabled { opacity: .5; cursor: default; }
 
-#reader { margin-top: 10px; border-radius: 8px; overflow: hidden; }
-#reader video { width: 100% !important; }
+.row.scan { margin-top: 10px; }
+.row.scan > * { flex: 1; }
+.visor { position: relative; margin-top: 10px; border-radius: 8px; overflow: hidden; background: #000; }
+.visor video { display: block; width: 100%; max-height: 60vh; object-fit: cover; }
+.mira {
+  position: absolute; left: 8%; right: 8%; top: 32%; bottom: 32%;
+  border: 3px solid rgba(255, 255, 255, .85); border-radius: 10px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); pointer-events: none;
+}
+.mira::after { content: ''; position: absolute; left: 6%; right: 6%; top: 50%; height: 2px; background: #f2b544; }
 
 .prod { display: flex; gap: 12px; align-items: flex-start; }
 .prod img { width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--line); }

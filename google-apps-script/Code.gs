@@ -52,7 +52,10 @@ function copierFeuilleDepart() {
   }
 }
 
-const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire', photo: 'Photos' };
+const ONGLETS = {
+  ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire', photo: 'Photos',
+  journal: 'Journal des achats', tdb: 'Tableau de bord',
+};
 
 // Ordre des colonnes ; l'application envoie des objets avec ces mêmes noms.
 const COL_REF = [
@@ -68,6 +71,55 @@ const COL_COMP = [
 ];
 // Photo réduite (JPEG en data URL, < 50 000 caractères : limite d'une cellule).
 const COL_PHOTO = ['gtin', 'mis_a_jour', 'saisi_par', 'photo'];
+// Une ligne par composant d'emballage et par achat enregistré (un nouveau scan = un nouvel achat ;
+// une correction depuis l'inventaire n'en crée pas). Sert aux fréquences du Tableau de bord.
+const COL_JOURNAL = [
+  'id_achat', 'date_achat', 'horodatage', 'saisi_par', 'gtin', 'nom', 'rayon', 'enseigne', 'commune',
+  'emballage', 'forme', 'materiau', 'famille', 'unites', 'poids_g', 'masse_g', 'consigne_tri',
+];
+
+function dateAchat_(v) {
+  if (v instanceof Date) return v;
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+}
+
+// ref et composants : objets aux colonnes COL_REF / COL_COMP.
+function lignesJournal_(ref, composants) {
+  const base = {
+    id_achat: `${ref.gtin}@${ref.mis_a_jour}`,
+    date_achat: dateAchat_(ref.date_achat || ref.mis_a_jour),
+    horodatage: ref.mis_a_jour, saisi_par: ref.saisi_par, gtin: String(ref.gtin), nom: ref.nom,
+    rayon: ref.rayon, enseigne: ref.enseigne, commune: ref.commune,
+  };
+  const ligne = (o) => COL_JOURNAL.map((c) => (o[c] == null ? '' : o[c]));
+  if (!composants.length) {
+    const emballage = ref.sans_emballage === 'oui' ? 'Sans emballage (vrac)' : 'Non caractérisé';
+    return [ligne({ ...base, emballage, unites: 0 })];
+  }
+  return composants.map((c) => {
+    const u = Number(c.unites) || 0;
+    const p = c.poids_g === '' || c.poids_g == null ? '' : Number(c.poids_g);
+    return ligne({
+      ...base, emballage: `${c.famille} · ${c.forme}`, forme: c.forme, materiau: c.materiau, famille: c.famille,
+      unites: u, poids_g: p, masse_g: p === '' ? '' : u * p, consigne_tri: c.consigne_tri,
+    });
+  });
+}
+
+// Premier remplissage : un achat par référence déjà présente dans la feuille.
+function journalDepuisReferences_(ss) {
+  const shJ = onglet_(ss, ONGLETS.journal, COL_JOURNAL);
+  const shR = ss.getSheetByName(ONGLETS.ref), shC = ss.getSheetByName(ONGLETS.comp);
+  if (shJ.getLastRow() > 1 || !shR || shR.getLastRow() < 2) return;
+  const objets = (sh, cols) => sh.getRange(2, 1, sh.getLastRow() - 1, cols.length).getValues()
+    .map((r) => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
+  const refs = objets(shR, COL_REF).filter((r) => r.gtin);
+  const comps = shC && shC.getLastRow() > 1 ? objets(shC, COL_COMP) : [];
+  const lignes = [];
+  refs.forEach((r) => lignes.push(...lignesJournal_(r, comps.filter((c) => String(c.gtin) === String(r.gtin)))));
+  if (lignes.length) shJ.getRange(2, 1, lignes.length, COL_JOURNAL.length).setValues(lignes);
+}
 
 function cle_() {
   const props = PropertiesService.getScriptProperties();
@@ -106,9 +158,103 @@ function configurer() {
   onglet_(ss, ONGLETS.ref, COL_REF);
   onglet_(ss, ONGLETS.comp, COL_COMP);
   onglet_(ss, ONGLETS.photo, COL_PHOTO).hideSheet();
+  const shJ = onglet_(ss, ONGLETS.journal, COL_JOURNAL);
+  shJ.getRange(2, COL_JOURNAL.indexOf('date_achat') + 1, shJ.getMaxRows() - 1, 1).setNumberFormat('yyyy-mm-dd');
+  journalDepuisReferences_(ss);
   synthese_(onglet_(ss, ONGLETS.syn));
   dictionnaire_(onglet_(ss, ONGLETS.dic));
+  const tdb = onglet_(ss, ONGLETS.tdb);
+  tableauDeBord_(tdb);
+  ss.setActiveSheet(tdb);
+  ss.moveActiveSheet(1);
   Logger.log(`Clé de l'application : ${cle_()}`);
+}
+
+// Tableau de bord : formules sur le Journal des achats (périodes glissantes) + graphiques.
+function tableauDeBord_(sh) {
+  sh.getCharts().forEach((g) => sh.removeChart(g));
+  sh.clear();
+  const J = `'${ONGLETS.journal}'!`;
+  const col = (n) => { const l = lettre_(COL_JOURNAL, n); return `${J}${l}2:${l}`; };
+  const D = col('date_achat'), U = col('unites'), F = col('famille'), E = col('emballage'), ID = col('id_achat'), M = col('masse_g');
+  const VERT = '#e6f1ee';
+  const titre = (a1, texte) => sh.getRange(a1).setValue(texte).setFontWeight('bold').setFontSize(12);
+  const entete = (a1) => sh.getRange(a1).setFontWeight('bold').setBackground(VERT);
+
+  sh.getRange('A1').setValue('Tableau de bord · emballages des achats enregistrés').setFontSize(16).setFontWeight('bold');
+  sh.getRange('A2').setValue('Se met à jour à chaque achat enregistré dans l’application. Périodes glissantes jusqu’à aujourd’hui.').setFontColor('#5f6b67');
+
+  // Chiffres clés sur 7 jours, 30 jours, 365 jours et au total.
+  titre('A4', 'Chiffres clés');
+  const periodes = [7, 30, 365, null];
+  const depuis = (j) => (j == null ? '' : `, ${D}, ">="&(TODAY()-${j})`);
+  sh.getRange('A5:E5').setValues([['', '7 jours', '30 jours', '365 jours', 'Total']]);
+  entete('A5:E5');
+  const cols = ['B', 'C', 'D', 'E'];
+  sh.getRange('A6:A10').setValues([['Achats enregistrés'], ["Unités d'emballage"], ['dont plastique'], ['Part de plastique'], ['Masse plastique connue (g)']]);
+  periodes.forEach((j, i) => {
+    const c = cols[i];
+    sh.getRange(`${c}6`).setFormula(`=IFERROR(COUNTUNIQUEIFS(${ID}, ${ID}, "<>"${depuis(j)}), 0)`);
+    sh.getRange(`${c}7`).setFormula(`=SUMIFS(${U}, ${ID}, "<>"${depuis(j)})`);
+    sh.getRange(`${c}8`).setFormula(`=SUMIFS(${U}, ${F}, "Plastique"${depuis(j)})`);
+    sh.getRange(`${c}9`).setFormula(`=IFERROR(${c}8/${c}7, 0)`);
+    sh.getRange(`${c}10`).setFormula(`=SUMIFS(${M}, ${F}, "Plastique"${depuis(j)})`);
+  });
+  sh.getRange('B9:E9').setNumberFormat('0%');
+  sh.getRange('B10:E10').setNumberFormat('#,##0');
+
+  // Emballages les plus fréquents (15 premiers sur toute la période).
+  titre('A12', 'Emballages les plus fréquents (unités)');
+  sh.getRange('A13:E13').setValues([['Emballage', '7 jours', '30 jours', '365 jours', 'Total']]);
+  entete('A13:E13');
+  sh.getRange('A14').setFormula(`=IFERROR(ARRAY_CONSTRAIN(QUERY({${E}, ${U}}, "select Col1, sum(Col2) where Col1 is not null and Col1 <> '' group by Col1 order by sum(Col2) desc label sum(Col2) ''", 0), 15, 1), "")`);
+  periodes.forEach((j, i) => {
+    sh.getRange(`${cols[i]}14`).setFormula(`=MAP(A14:A28, LAMBDA(e, IF(e="", "", SUMIFS(${U}, ${E}, e${depuis(j)}))))`);
+  });
+
+  // Évolution : 12 dernières semaines, 12 derniers mois, 3 dernières années.
+  const serie = (ligneTitre, texte, premiere, n, debut, fin, format) => {
+    titre(`A${ligneTitre}`, texte);
+    const h = ligneTitre + 1, d = h + 1, f = h + n;
+    sh.getRange(`A${h}:D${h}`).setValues([['Période', 'Achats', "Unités d'emballage", 'dont plastique']]);
+    entete(`A${h}:D${h}`);
+    sh.getRange(`A${d}`).setFormula(premiere);
+    const entre = (p) => `, ${D}, ">="&${debut(p)}, ${D}, "<"&${fin(p)}`;
+    sh.getRange(`B${d}`).setFormula(`=MAP(A${d}:A${f}, LAMBDA(p, IFERROR(COUNTUNIQUEIFS(${ID}, ${ID}, "<>"${entre('p')}), 0)))`);
+    sh.getRange(`C${d}`).setFormula(`=MAP(A${d}:A${f}, LAMBDA(p, SUMIFS(${U}, ${ID}, "<>"${entre('p')})))`);
+    sh.getRange(`D${d}`).setFormula(`=MAP(A${d}:A${f}, LAMBDA(p, SUMIFS(${U}, ${F}, "Plastique"${entre('p')})))`);
+    sh.getRange(`A${d}:A${f}`).setNumberFormat(format);
+    return sh.getRange(`A${h}:D${f}`);
+  };
+  const semaines = serie(31, 'Par semaine (12 dernières, semaines du lundi)',
+    '=ARRAYFORMULA(TODAY()-WEEKDAY(TODAY(), 2)+1-7*SEQUENCE(12, 1, 11, -1))', 12, (p) => p, (p) => `(${p}+7)`, 'dd/mm');
+  const mois = serie(47, 'Par mois (12 derniers)',
+    '=ARRAYFORMULA(EDATE(EOMONTH(TODAY(), -1)+1, SEQUENCE(12, 1, -11, 1)))', 12, (p) => p, (p) => `EDATE(${p}, 1)`, 'mmm yyyy');
+  const annees = serie(63, 'Par année',
+    '=SEQUENCE(3, 1, YEAR(TODAY())-2, 1)', 3, (p) => `DATE(${p}, 1, 1)`, (p) => `DATE(${p}+1, 1, 1)`, '0');
+
+  // Répartition par famille de matériau (toute la période).
+  titre('A70', 'Répartition par famille de matériau (unités, total)');
+  sh.getRange('A71:B71').setValues([['Famille', 'Unités']]);
+  entete('A71:B71');
+  sh.getRange('A72').setFormula(`=IFERROR(QUERY({${F}, ${U}}, "select Col1, sum(Col2) where Col1 is not null and Col1 <> '' group by Col1 order by sum(Col2) desc label sum(Col2) ''", 0), "")`);
+
+  sh.setColumnWidth(1, 260);
+  [2, 3, 4, 5].forEach((c) => sh.setColumnWidth(c, 95));
+
+  const COULEURS = ['#1f6f5c', '#f2b544', '#d9822b', '#6b7c93'];
+  const graphique = (type, plage, ligne, titreG, options) => {
+    let b = sh.newChart().setChartType(type).addRange(plage).setPosition(ligne, 7, 0, 0)
+      .setOption('title', titreG).setOption('width', 620).setOption('height', 340)
+      .setOption('legend', { position: 'bottom' }).setOption('colors', COULEURS);
+    Object.entries(options || {}).forEach(([k, v]) => { b = b.setOption(k, v); });
+    sh.insertChart(b.build());
+  };
+  graphique(Charts.ChartType.BAR, sh.getRange('A13:D28'), 2, 'Emballages les plus fréquents — 7 / 30 / 365 jours', { hAxis: { title: 'Unités' } });
+  graphique(Charts.ChartType.COLUMN, semaines, 20, 'Par semaine — achats et unités d’emballage');
+  graphique(Charts.ChartType.COLUMN, mois, 38, 'Par mois — achats et unités d’emballage');
+  graphique(Charts.ChartType.COLUMN, annees, 56, 'Par année — achats et unités d’emballage');
+  graphique(Charts.ChartType.PIE, sh.getRange('A71:B85'), 74, 'Familles de matériau (unités, total)', { pieHole: 0.4 });
 }
 
 function synthese_(sh) {
@@ -189,6 +335,8 @@ function dictionnaire_(sh) {
     ['Composants', 'source_poids', 'Pesé par nous, déclaré par le fabricant, Open Facts (mesuré/spécifié/estimé) ou estimé par nous'],
     ['Composants', 'consigne_tri', 'Règle nationale générale (extension des consignes de tri, 2023) — à vérifier avec le Guide du tri du Grand Nancy'],
     ['Composants', 'origine', 'OFF, OFF corrigé ou saisie manuelle'],
+    ['Journal des achats', '(une ligne par composant)', "Chaque fiche enregistrée après un scan = un achat ; une correction depuis l'inventaire n'ajoute rien. date_achat = date du ticket. emballage = famille · forme"],
+    ['Tableau de bord', '', 'Chiffres clés et graphiques sur 7 / 30 / 365 jours, par semaine, mois et année, calculés à partir du Journal des achats'],
     ['', '', ''],
     ['Liste', 'Rayons', 'Crèmerie · Fromagerie · Charcuterie / traiteur · Boucherie / poissonnerie · Fruits et légumes · Boulangerie / viennoiserie · Épicerie salée · Épicerie sucrée · Boissons · Surgelés · Hygiène / beauté · Entretien / maison · Animaux · Autre'],
   ];
@@ -288,6 +436,14 @@ function doPost(e) {
     const toutes = gardes.concat(ajout);
     if (nC > 0) shC.getRange(2, 1, nC, COL_COMP.length).clearContent();
     if (toutes.length) shC.getRange(2, 1, toutes.length, COL_COMP.length).setValues(toutes);
+
+    // Journal : un nouvel achat pour chaque fiche enregistrée après un scan.
+    const journal = [];
+    lots.filter((x) => x.achat).forEach((x) => journal.push(...lignesJournal_(x.ref, x.composants || [])));
+    if (journal.length) {
+      const shJ = onglet_(ss, ONGLETS.journal, COL_JOURNAL);
+      shJ.getRange(shJ.getLastRow() + 1, 1, journal.length, COL_JOURNAL.length).setValues(journal);
+    }
 
     return json_({ ok: true, n: lots.length });
   } catch (err) {

@@ -147,6 +147,7 @@ details.card[open] > summary::before { content: '▾'; }
 .lista .info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lista .info span { color: var(--muted); font-size: 13px; }
 .vacio { text-align: center; color: var(--muted); padding: 24px 0; }
+.foto { display: block; width: 100%; max-height: 320px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--line); }
 .aviso { border-left: 4px solid var(--accent); background: var(--soft); }
 .aviso .note { margin-top: 4px; }
 .ok-sync { color: var(--good); }

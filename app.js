@@ -3,7 +3,7 @@ import {
   CAUSAS, ESTADOS_OFF, familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
 } from './reglas.js';
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.6.0';
 const KEY = 'resser.pruebaA.v1'; // clé inchangée pour conserver les données déjà saisies
 const OFF_FIELDS = 'code,product_name,product_name_fr,brands,quantity,packagings,packagings_complete,image_front_small_url';
 // Lecteur de secours (zxing-cpp en WebAssembly) quand le navigateur n'a pas de BarcodeDetector natif (iPhone, Firefox…).
@@ -32,6 +32,15 @@ function guardar() {
 const db = cargar();
 db.refs ??= {};
 db.prefs ??= {};
+
+// Feuille de l'équipe (Apps Script « Resser Test A - synchronisation »). L'URL seule ne permet
+// rien : chaque lecture ou écriture exige la clé de l'équipe, saisie sur le téléphone et jamais
+// écrite dans ce dépôt public.
+const FEUILLE = {
+  url: 'https://script.google.com/macros/s/AKfycbwanRuGOF3gCYAw-alVU-no0VYf4XNkm6YDEMSeZD4ODirJtG-MUOlHV_fzwVYBHLf4pw/exec',
+  get cle() { return db.prefs.sync_cle; },
+};
+const conectado = () => !!db.prefs.sync_cle;
 // Migration des catégories des versions ≤ 0.3 vers les rayons.
 for (const r of Object.values(db.refs)) if (ALIAS_CATEGORIAS[r.categoria]) r.categoria = ALIAS_CATEGORIAS[r.categoria];
 if (ALIAS_CATEGORIAS[db.prefs.categoria]) db.prefs.categoria = ALIAS_CATEGORIAS[db.prefs.categoria];
@@ -181,7 +190,7 @@ const COLS_REF = [
   'mis_a_jour', 'saisi_par', 'gtin', 'libelle_ticket', 'nom', 'marque', 'quantite', 'rayon',
   'enseigne', 'commune', 'date_achat', 'sans_emballage', 'base_produits', 'statut_off',
   'off_emballages_complets', 'nb_composants', 'materiaux', 'formes', 'masse_plastique_g',
-  'classe_suggeree', 'classe_finale', 'verifie', 'donnees_off', 'cause', 'observations', 'version_app',
+  'classe_suggeree', 'classe_finale', 'verifie', 'donnees_off', 'cause', 'observations', 'version_app', 'photo',
 ];
 const COLS_COMP = [
   'mis_a_jour', 'saisi_par', 'gtin', 'nom', 'rayon', 'composant', 'forme', 'materiau', 'famille',
@@ -219,8 +228,9 @@ function filaRef(r) {
     cause: r.causa ? labelDe(CAUSAS, r.causa) : '',
     observations: r.obs,
     version_app: r.version_app,
+    photo: r.photo || r.photo_en_feuille ? 'oui' : '',
     // Fiche complète pour pré-remplir le produit chez les autres membres (non exportée en CSV).
-    donnees_app: JSON.stringify(r, (k, v) => (k === 'sync' || k.startsWith('_') ? undefined : v)),
+    donnees_app: JSON.stringify(r, (k, v) => (k === 'sync' || k === 'photo' || k.startsWith('_') ? undefined : v)),
   };
 }
 
@@ -271,11 +281,11 @@ for (const [k, sel] of Object.entries(CTX)) {
 }
 function resumirContexto() {
   const c = db.prefs.contexto;
-  const partes = [c.enseigne, c.commune, c.fecha].filter(Boolean);
+  const partes = [db.prefs.nombre, c.enseigne, c.commune, c.fecha].filter(Boolean);
   $('#contexto-resumen').textContent = partes.length ? `· ${partes.join(' · ')}` : '· à renseigner';
 }
 resumirContexto();
-if (!db.prefs.contexto.enseigne) $('#contexto').open = true;
+if (!db.prefs.contexto.enseigne || !db.prefs.nombre || !db.prefs.sync_cle) $('#contexto').open = true;
 
 const selCat = $('#categoria');
 selCat.innerHTML = opciones(CATEGORIAS, db.prefs.categoria || CATEGORIAS[0].id);
@@ -309,14 +319,21 @@ async function buscar(valor, { reconsultar = false } = {}) {
   buscando = true;
   $('#buscar').disabled = true;
   try {
+    // Ordre : téléphone (ci-dessus) → feuille de l'équipe → bases Open Facts → création.
+    let avisoHoja = '';
     if (!reconsultar) {
-      estado("Recherche dans le catalogue de l'équipe…");
-      const delEquipo = await consultarEquipo(gtin);
-      if (delEquipo) {
+      estado("Recherche dans la feuille de l'équipe…");
+      const eq = await consultarEquipo(gtin);
+      if (eq.estado === 'existe') {
         estado('');
         if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
-        abrirEditor(desdeEquipo(delEquipo));
+        abrirEditor(desdeEquipo(eq.ref, eq.photo));
         return;
+      }
+      if (eq.estado === 'error') {
+        avisoHoja = conectado()
+          ? " Attention : la feuille de l'équipe n'a pas pu être vérifiée (connexion ?), le produit existe peut-être déjà."
+          : " Attention : saisissez la clé de l'équipe dans « Contexte d'achat » pour vérifier la feuille de l'équipe.";
       }
     }
     estado('Interrogation des bases Open Facts…');
@@ -331,7 +348,9 @@ async function buscar(valor, { reconsultar = false } = {}) {
       abrirEditor(r);
     } else {
       const base = labelDe(BASES, res.base);
-      estado(res.estado === 'encontrado' ? `Trouvé dans ${base}. Vérifiez les emballages sur le produit physique.` : 'Absent des bases Open Facts. Décrivez les emballages à la main.');
+      estado((res.estado === 'encontrado'
+        ? `Nouveau pour l'équipe, trouvé dans ${base}. Vérifiez les emballages sur le produit physique et prenez une photo.`
+        : 'Produit nouveau : absent de la feuille et des bases Open Facts. Prenez une photo, puis décrivez les emballages.') + avisoHoja);
       abrirEditor(nuevoRegistro(gtin, res));
     }
   } catch (e) {
@@ -344,16 +363,19 @@ async function buscar(valor, { reconsultar = false } = {}) {
 
 // ---------- Catalogue partagé de l'équipe (feuille Google) ----------
 
+// Résultat : { estado: 'existe', ref, photo } | { estado: 'absent' } | { estado: 'error' }.
 async function consultarEquipo(gtin) {
-  if (!syncConfigurado() || !navigator.onLine) return null;
+  if (!conectado() || !navigator.onLine) return { estado: 'error' };
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 8000);
+  const t = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const url = `${db.prefs.sync_url}?cle=${encodeURIComponent(db.prefs.sync_cle)}&gtin=${encodeURIComponent(gtin)}`;
+    const url = `${FEUILLE.url}?cle=${encodeURIComponent(FEUILLE.cle)}&gtin=${encodeURIComponent(gtin)}`;
     const j = await (await fetch(url, { signal: ctrl.signal })).json();
-    return j.ok && j.ref && j.ref.gtin === gtin && Array.isArray(j.ref.componentes) ? j.ref : null;
+    if (!j.ok) return { estado: 'error' };
+    const valido = j.ref && j.ref.gtin === gtin && Array.isArray(j.ref.componentes);
+    return valido ? { estado: 'existe', ref: j.ref, photo: j.photo || null } : { estado: 'absent' };
   } catch {
-    return null; // hors connexion ou feuille injoignable : on continue avec Open Facts
+    return { estado: 'error' }; // hors connexion ou feuille injoignable
   } finally {
     clearTimeout(t);
   }
@@ -362,8 +384,11 @@ async function consultarEquipo(gtin) {
 const fechaCorta = (iso) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '');
 
 // Fiche de l'équipe → brouillon local : le contexte d'achat devient celui du scan en cours.
-function desdeEquipo(ref) {
+function desdeEquipo(ref, photo) {
   const r = structuredClone(ref);
+  delete r.photo;
+  r.photo_en_feuille = !!photo;
+  r._photo = photo || null;
   if (ALIAS_CATEGORIAS[r.categoria]) r.categoria = ALIAS_CATEGORIAS[r.categoria];
   const ctx = db.prefs.contexto || {};
   if (ctx.enseigne) r.enseigne = ctx.enseigne;
@@ -375,13 +400,19 @@ function desdeEquipo(ref) {
 
 // Référence déjà sur ce téléphone : signaler si la feuille en a une version plus récente.
 async function verificarEquipo(gtin) {
-  const delEquipo = await consultarEquipo(gtin);
+  if (gtin.startsWith('SC-')) return;
+  const res = await consultarEquipo(gtin);
   const local = db.refs[gtin];
-  if (!delEquipo || !local || !actual || actual.gtin !== gtin) return;
-  if ((delEquipo.actualizado || '') <= (local.actualizado || '')) return;
-  actual._nuevo = delEquipo;
-  pintarEditor();
-  toast("Une version plus récente existe dans la feuille de l'équipe.");
+  if (res.estado !== 'existe' || !local || !actual || actual.gtin !== gtin) return;
+  let repintar = false;
+  if (!actual.photo && res.photo) { actual._photo = res.photo; repintar = true; }
+  if ((res.ref.actualizado || '') > (local.actualizado || '')) {
+    actual._nuevo = res.ref;
+    actual._nuevoPhoto = res.photo;
+    repintar = true;
+    toast("Une version plus récente existe dans la feuille de l'équipe.");
+  }
+  if (repintar) pintarEditor();
 }
 
 // Produits sans code-barres (vrac, fruits et légumes, pain…) : identifiant interne « SC-… ».
@@ -554,6 +585,8 @@ function pintarEditor() {
   const insignia = enOFF
     ? `<span class="badge good">Dans ${esc(base.label)}</span>`
     : sinCodigo ? '<span class="badge">Sans code-barres</span>' : '<span class="badge bad">Introuvable dans les bases Open Facts</span>';
+  const foto = r.photo || r._photo;
+  const nuevo = !yaGuardado && !r._equipo;
   const eq = r._equipo;
   const avisoEquipo = eq ? `
     <div class="card aviso"><strong>Déjà caractérisé par ${esc(eq.por)}</strong> le ${esc(fechaCorta(eq.fecha))}
@@ -594,6 +627,12 @@ function pintarEditor() {
         <label class="field">Commune<input data-k="commune" list="communes" value="${esc(r.commune)}"></label>
         <label class="field">Date d'achat<input data-k="date_achat" type="date" value="${esc(r.date_achat)}"></label>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>Photo du produit</h3>
+      ${foto ? `<img class="foto" src="${esc(foto)}" alt="Photo du produit">` : `<p class="note">${nuevo ? 'Produit nouveau pour l’équipe : prenez une photo de face, emballage visible.' : 'Aucune photo pour l’instant.'}</p>`}
+      <label class="button ${foto ? 'secondary' : 'primary'} wide">${foto ? 'Reprendre la photo' : 'Prendre une photo'}<input id="foto-producto" type="file" accept="image/*" capture="environment" hidden></label>
     </div>
 
     <div class="card">
@@ -674,11 +713,40 @@ function refrescarDerivados() {
     : `Classe finale ${claseFinal(r)} : ${g1(m)} g de plastique par unité de vente.`;
 }
 
+// Photo réduite à 480 px en JPEG pour tenir dans une cellule de la feuille (< 50 000 caractères).
+async function reducirFoto(file) {
+  const img = await createImageBitmap(file);
+  const escala = Math.min(1, 480 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * escala);
+  c.height = Math.round(img.height * escala);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  img.close?.();
+  for (const q of [0.7, 0.55, 0.4, 0.3]) {
+    const url = c.toDataURL('image/jpeg', q);
+    if (url.length < 45000) return url;
+  }
+  throw new Error('photo trop lourde');
+}
+
+$('#editor').addEventListener('change', async (e) => {
+  if (e.target.id !== 'foto-producto' || !actual) return;
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    actual.photo = await reducirFoto(f);
+    delete actual._photo;
+    pintarEditor();
+  } catch (err) {
+    toast(`Photo non utilisable : ${err.message || err}`);
+  }
+});
+
 // 'change' couvre les navigateurs qui n'émettent pas 'input' sur select/checkbox ; mettre à jour deux fois est sans effet.
 ['input', 'change'].forEach((ev) => $('#editor').addEventListener(ev, alEditar));
 function alEditar(e) {
   const t = e.target;
-  if (!actual) return;
+  if (!actual || t.id === 'foto-producto') return;
   if (t.dataset.k) {
     actual[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value;
   } else if (t.dataset.c) {
@@ -705,10 +773,15 @@ $('#editor').addEventListener('click', (e) => {
     actual.componentes.splice(Number(t.dataset.del), 1);
     pintarEditor();
   } else if (t.id === 'guardar') {
+    if (!db.prefs.nombre) {
+      $('#contexto').open = true;
+      $('#cfg-nombre').focus();
+      $('#contexto').scrollIntoView({ behavior: 'smooth' });
+      return toast('Indiquez votre nom dans « Contexte d’achat » avant d’enregistrer.');
+    }
     if (actual.off.estado === 'sin_codigo' && !actual.nombre.trim()) return toast('Donnez un nom au produit sans code-barres.');
     if (actual.sin_envase) actual.componentes = [];
-    delete actual._equipo;
-    delete actual._nuevo;
+    for (const k of Object.keys(actual)) if (k.startsWith('_')) delete actual[k];
     actual.actualizado = ahora();
     actual.version_app = APP_VERSION;
     // saisi_par = dernière personne à avoir enregistré la fiche.
@@ -725,7 +798,7 @@ $('#editor').addEventListener('click', (e) => {
     estado(`${Object.keys(db.refs).length} référence(s) dans l'inventaire.`);
     sincronizar([gtin]);
   } else if (t.id === 'usar-equipo') {
-    abrirEditor(desdeEquipo(actual._nuevo));
+    abrirEditor(desdeEquipo(actual._nuevo, actual._nuevoPhoto));
   } else if (t.id === 'reconsultar') {
     buscar(actual.gtin, { reconsultar: true });
   } else if (t.id === 'descartar') {
@@ -737,41 +810,32 @@ $('#editor').addEventListener('click', (e) => {
 
 // ---------- Synchronisation avec Google Sheets (Apps Script) ----------
 
-const syncConfigurado = () => !!(db.prefs.sync_url && db.prefs.sync_cle);
 const pendientes = () => Object.values(db.refs).filter((r) => r.sync !== 'ok');
 
 function resumirSync() {
   const n = pendientes().length;
-  $('#sync-resumen').textContent = !syncConfigurado()
-    ? '· non configurée'
-    : n ? `· ${n} en attente` : '· à jour';
+  $('#sync-resumen').textContent = !conectado()
+    ? "· non reliée : saisissez la clé de l'équipe dans « Contexte d'achat »"
+    : n ? `· ${n} en attente d'envoi` : '· à jour';
 }
 
 $('#cfg-nombre').value = db.prefs.nombre || '';
-$('#cfg-url').value = db.prefs.sync_url || '';
-$('#cfg-cle').value = db.prefs.sync_cle || '';
-if (!syncConfigurado()) $('#sync-card').open = true;
+$('#cfg-nombre').addEventListener('change', () => { db.prefs.nombre = $('#cfg-nombre').value.trim(); guardar(); resumirContexto(); });
 
-$('#cfg-guardar').addEventListener('click', async () => {
-  db.prefs.nombre = $('#cfg-nombre').value.trim();
-  db.prefs.sync_url = $('#cfg-url').value.trim();
+$('#cfg-cle').value = db.prefs.sync_cle || '';
+$('#cfg-cle').addEventListener('change', async () => {
   db.prefs.sync_cle = $('#cfg-cle').value.trim();
   guardar();
   resumirSync();
-  if (!syncConfigurado()) { $('#sync-estado').textContent = 'Renseignez l’URL et la clé.'; return; }
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(db.prefs.sync_url)) {
-    $('#sync-estado').textContent = 'L’URL doit commencer par https://script.google.com/macros/s/ et finir par /exec.';
-    return;
-  }
-  $('#sync-estado').textContent = 'Test de la connexion…';
+  if (!conectado()) return;
+  $('#cle-estado').textContent = 'Vérification de la clé…';
   try {
-    const r = await fetch(`${db.prefs.sync_url}?cle=${encodeURIComponent(db.prefs.sync_cle)}`);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.erreur || 'refusé');
-    $('#sync-estado').textContent = `Connecté à « ${j.feuille} ». Envoi des références en attente…`;
-    await sincronizar();
+    const j = await (await fetch(`${FEUILLE.url}?cle=${encodeURIComponent(FEUILLE.cle)}`)).json();
+    if (!j.ok) throw new Error(j.erreur || 'refusée');
+    $('#cle-estado').textContent = `Clé correcte : relié à « ${j.feuille} ».`;
+    sincronizar();
   } catch (e) {
-    $('#sync-estado').textContent = `Échec de la connexion : ${e.message}. Vérifiez l’URL (déploiement « Tout le monde ») et la clé.`;
+    $('#cle-estado').textContent = `Clé refusée ou feuille injoignable (${e.message}).`;
   }
 });
 
@@ -779,7 +843,7 @@ $('#sync-todo').addEventListener('click', () => sincronizar());
 
 let sincronizando = false;
 async function sincronizar(gtins) {
-  if (!syncConfigurado() || sincronizando || !navigator.onLine) { resumirSync(); return; }
+  if (!conectado() || sincronizando || !navigator.onLine) { resumirSync(); return; }
   const lista = (gtins ? gtins.map((g) => db.refs[g]).filter(Boolean) : pendientes());
   if (!lista.length) { resumirSync(); if (!gtins) $('#sync-estado').textContent = 'Tout est déjà dans la feuille.'; return; }
   sincronizando = true;
@@ -788,13 +852,18 @@ async function sincronizar(gtins) {
     // Lots de 25 : une requête Apps Script reste sous quelques secondes.
     for (let i = 0; i < lista.length; i += 25) {
       const lote = lista.slice(i, i + 25);
-      const r = await fetch(db.prefs.sync_url, {
+      const r = await fetch(FEUILLE.url, {
         method: 'POST',
-        body: JSON.stringify({ cle: db.prefs.sync_cle, refs: lote.map((x) => ({ ref: filaRef(x), composants: filasComp(x) })) }),
+        body: JSON.stringify({ cle: FEUILLE.cle, refs: lote.map((x) => ({ ref: filaRef(x), composants: filasComp(x), photo: x.photo || null })) }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.erreur || 'refusé');
-      lote.forEach((x) => { if (db.refs[x.gtin] === x) x.sync = 'ok'; });
+      // Une fois dans la feuille, la photo n'est plus gardée sur le téléphone (place limitée).
+      lote.forEach((x) => {
+        if (db.refs[x.gtin] !== x) return;
+        x.sync = 'ok';
+        if (x.photo) { x.photo_en_feuille = true; delete x.photo; }
+      });
       enviadas += lote.length;
       guardar();
     }
@@ -821,7 +890,7 @@ function pintarLista() {
   const refs = Object.values(db.refs)
     .filter((r) => !q || `${r.nombre} ${r.marca} ${r.gtin} ${r.libelle_ticket || ''}`.toLowerCase().includes(q))
     .sort((a, b) => b.actualizado.localeCompare(a.actualizado));
-  const conSync = syncConfigurado();
+  const conSync = conectado();
   $('#lista').innerHTML = refs.length
     ? refs.map((r) => {
       const k = claseFinal(r);
@@ -1009,7 +1078,7 @@ function pintarResumen() {
 
 contar();
 resumirSync();
-if (syncConfigurado() && pendientes().length) sincronizar();
+if (conectado() && pendientes().length) sincronizar();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

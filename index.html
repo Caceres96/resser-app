@@ -28,11 +28,14 @@
       <details class="card" id="contexto">
         <summary><strong>Contexte d'achat</strong> <span id="contexto-resumen" class="note"></span></summary>
         <div class="grid" style="margin-top:10px">
+          <label class="field">Votre nom<input id="cfg-nombre" autocomplete="name" placeholder="ex. Cristian"></label>
+          <label class="field">Clé de l'équipe<input id="cfg-cle" autocomplete="off" placeholder="fournie par l'équipe"></label>
           <label class="field">Enseigne<input id="ctx-enseigne" list="enseignes" autocomplete="off" placeholder="ex. Carrefour"></label>
           <label class="field">Commune<input id="ctx-commune" list="communes" autocomplete="off" placeholder="ex. Nancy"></label>
           <label class="field">Date d'achat<input id="ctx-fecha" type="date"></label>
         </div>
-        <p class="note">Gardé entre deux scans : renseignez-le une fois par ticket.</p>
+        <p id="cle-estado" class="muted" role="status"></p>
+        <p class="note">Gardé entre deux scans : renseignez-le une fois par ticket. Votre nom accompagne chaque produit envoyé à la feuille de l'équipe.</p>
       </details>
 
       <div class="card">
@@ -63,19 +66,13 @@
     </section>
 
     <section id="tab-inventario" class="tab">
-      <details class="card" id="sync-card">
-        <summary><strong>Synchronisation Google Sheets</strong> <span id="sync-resumen" class="note"></span></summary>
-        <div style="margin-top:10px">
-          <label class="field">Votre nom (colonne « saisi_par »)<input id="cfg-nombre" autocomplete="name" placeholder="ex. Cristian"></label>
-          <label class="field">URL de l'application Web (Apps Script, se termine par /exec)<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
-          <label class="field">Clé<input id="cfg-cle" autocomplete="off" placeholder="Clé fournie par l'équipe"></label>
-          <div class="actions">
-            <button type="button" id="cfg-guardar" class="primary">Enregistrer et tester</button>
-            <button type="button" id="sync-todo" class="secondary">Envoyer les références en attente</button>
-          </div>
-          <p id="sync-estado" class="muted" role="status"></p>
+      <div class="card">
+        <strong>Feuille de l'équipe</strong> <span id="sync-resumen" class="note"></span>
+        <div class="actions">
+          <button type="button" id="sync-todo" class="secondary">Envoyer les références en attente</button>
         </div>
-      </details>
+        <p id="sync-estado" class="muted" role="status"></p>
+      </div>
       <div class="card">
         <div class="row">
           <input id="filtro" type="search" placeholder="Filtrer par nom, marque, libellé ou code">

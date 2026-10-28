@@ -34,7 +34,9 @@ La masse plastique (Σ unités × poids des composants plastiques) n'est renseig
 
 ## Feuille partagée (Google Sheets)
 
-`google-apps-script/Code.gs` reçoit les références de tous les téléphones dans une même feuille (onglets Références, Composants, Synthèse, Dictionnaire) et renvoie la fiche d'un produit déjà caractérisé, que l'app affiche pré-remplie. Installation : voir l'en-tête du fichier. Dans l'app : Inventaire › Synchronisation Google Sheets (nom, URL `/exec`, clé). L'URL et la clé ne sont pas dans ce dépôt.
+`google-apps-script/Code.gs` reçoit les références de tous les téléphones dans une même feuille (onglets Références, Composants, Synthèse, Dictionnaire) et renvoie la fiche d'un produit déjà caractérisé, que l'app affiche pré-remplie. Installation : voir l'en-tête du fichier. L'URL du script est intégrée à l'app ; chaque personne saisit seulement son nom et la clé de l'équipe dans « Contexte d'achat ». La clé n'est pas dans ce dépôt.
+
+Recherche d'un code scanné : téléphone → feuille de l'équipe → bases Open Facts → création (avec photo réduite, gardée dans l'onglet masqué « Photos »).
 
 ## Données
 

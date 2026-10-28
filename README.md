@@ -32,6 +32,10 @@ La caméra du navigateur exige HTTPS. Options : publier le dossier sur GitHub Pa
 
 La masse plastique (Σ unités × poids des composants plastiques) n'est renseignée qu'en A et B. La classe suggérée peut être corrigée à la main.
 
+## Feuille partagée (Google Sheets)
+
+`google-apps-script/Code.gs` reçoit les références de tous les téléphones dans une même feuille (onglets Références, Composants, Synthèse, Dictionnaire) et renvoie la fiche d'un produit déjà caractérisé, que l'app affiche pré-remplie. Installation : voir l'en-tête du fichier. Dans l'app : Inventaire › Synchronisation Google Sheets (nom, URL `/exec`, clé). L'URL et la clé ne sont pas dans ce dépôt.
+
 ## Données
 
 Elles sont enregistrées dans le navigateur (`localStorage`) de l'appareil. Exporter régulièrement des sauvegardes JSON ; « Importer JSON » fusionne par GTIN (la version la plus récente l'emporte), ce qui permet de réunir le travail de plusieurs personnes.

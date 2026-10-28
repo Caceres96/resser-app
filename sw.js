@@ -2,7 +2,7 @@
 // Fichiers de l'app : réseau d'abord (pour toujours voir la dernière version), cache en secours.
 // Lecteur de codes (script + WebAssembly sur jsDelivr) : cache d'abord, les versions sont figées.
 // Open Food Facts : toujours le réseau (les données sont enregistrées dans chaque référence).
-const CACHE = 'resser-pruebaA-v2';
+const CACHE = 'resser-pruebaA-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'reglas.js', 'manifest.webmanifest', 'icon.svg'];
 const CDN = /^https:\/\/(cdn|fastly)\.jsdelivr\.net\/npm\/(barcode-detector|zxing-wasm)@/;
 
@@ -20,8 +20,9 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin === location.origin) {
+    // no-cache : revalide auprès du serveur au lieu de servir le cache HTTP (10 min sur GitHub Pages).
     e.respondWith(
-      fetch(e.request)
+      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }))
         .then((res) => {
           if (res.ok) { const copia = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); }
           return res;

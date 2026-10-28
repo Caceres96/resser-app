@@ -244,7 +244,7 @@ function tableauDeBord_(sh) {
 
   const COULEURS = ['#1f6f5c', '#f2b544', '#d9822b', '#6b7c93'];
   const graphique = (type, plage, ligne, titreG, options) => {
-    let b = sh.newChart().setChartType(type).addRange(plage).setPosition(ligne, 7, 0, 0)
+    let b = sh.newChart().setChartType(type).addRange(plage).setNumHeaders(1).setPosition(ligne, 7, 0, 0)
       .setOption('title', titreG).setOption('width', 620).setOption('height', 340)
       .setOption('legend', { position: 'bottom' }).setOption('colors', COULEURS);
     Object.entries(options || {}).forEach(([k, v]) => { b = b.setOption(k, v); });

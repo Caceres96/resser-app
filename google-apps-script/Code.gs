@@ -208,6 +208,8 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.cle !== cle_()) return json_({ ok: false, erreur: 'Clé invalide' });
   const ss = classeur_();
+  // Maintenance : ?cle=…&accion=configurer recrée Synthèse et Dictionnaire (données intactes).
+  if (p.accion === 'configurer') { configurer(); return json_({ ok: true, configure: true }); }
   if (!p.gtin) return json_({ ok: true, feuille: ss.getName() });
   const sh = ss.getSheetByName(ONGLETS.ref);
   const n = sh ? sh.getLastRow() - 1 : 0;

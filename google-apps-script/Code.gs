@@ -1,16 +1,21 @@
 /**
  * Resser · Test A — réception des données de l'application dans Google Sheets.
  *
- * Installation (une seule fois, depuis la feuille « data base ») :
- *  1. Extensions > Apps Script, coller ce fichier à la place de Code.gs, enregistrer.
+ * Installation (une seule fois) :
+ *  1. Créer un projet Apps Script, coller ce fichier, remplacer ID_FEUILLE par l'identifiant
+ *     de la feuille (la partie de l'URL entre /d/ et /edit), enregistrer.
  *  2. Exécuter la fonction « configurer » et autoriser l'accès : crée les onglets
- *     Références, Composants, Synthèse et Dictionnaire, et génère la clé de l'application.
+ *     Références, Composants, Synthèse et Dictionnaire, et écrit la clé de l'application
+ *     dans le journal d'exécution.
  *  3. Déployer > Nouveau déploiement > Application Web :
  *     « Exécuter en tant que : moi », « Accès : tout le monde ». Copier l'URL /exec.
- *  4. Dans l'app (Inventaire > Synchronisation) : coller l'URL et la clé (menu Resser > Afficher la clé).
+ *  4. Dans l'app (Inventaire > Synchronisation) : coller l'URL et la clé.
  *
- * L'onglet existant « Hoja 1 » n'est jamais modifié.
+ * Les onglets existants (« Hoja 1 ») ne sont jamais modifiés.
  */
+
+const ID_FEUILLE = 'COLLER_ICI_L_ID_DE_LA_FEUILLE';
+const classeur_ = () => SpreadsheetApp.openById(ID_FEUILLE);
 
 const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire' };
 
@@ -26,13 +31,6 @@ const COL_COMP = [
   'unites', 'poids_g', 'source_poids', 'consigne_tri', 'recyclage_off', 'origine',
 ];
 
-function onOpen() {
-  SpreadsheetApp.getUi().createMenu('Resser')
-    .addItem("Afficher la clé de l'application", 'afficherCle')
-    .addItem('Recréer Synthèse et Dictionnaire', 'configurer')
-    .addToUi();
-}
-
 function cle_() {
   const props = PropertiesService.getScriptProperties();
   let cle = props.getProperty('CLE');
@@ -43,8 +41,9 @@ function cle_() {
   return cle;
 }
 
+// À exécuter depuis l'éditeur pour retrouver la clé (journal d'exécution).
 function afficherCle() {
-  SpreadsheetApp.getUi().alert(`Clé à saisir dans l'application : ${cle_()}`);
+  Logger.log(`Clé à saisir dans l'application : ${cle_()}`);
 }
 
 const lettre_ = (cols, nom) => {
@@ -65,7 +64,7 @@ function onglet_(ss, nom, entetes) {
 }
 
 function configurer() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = classeur_();
   onglet_(ss, ONGLETS.ref, COL_REF);
   onglet_(ss, ONGLETS.comp, COL_COMP);
   synthese_(onglet_(ss, ONGLETS.syn));
@@ -165,7 +164,7 @@ const json_ = (o) => ContentService.createTextOutput(JSON.stringify(o)).setMimeT
 // Test de connexion depuis l'application : ?cle=XXXX
 function doGet(e) {
   const ok = e && e.parameter && e.parameter.cle === cle_();
-  return json_(ok ? { ok: true, feuille: SpreadsheetApp.getActive().getName() } : { ok: false, erreur: 'Clé invalide' });
+  return json_(ok ? { ok: true, feuille: classeur_().getName() } : { ok: false, erreur: 'Clé invalide' });
 }
 
 // Corps attendu : { cle, refs: [ { ref: {colonne: valeur…}, composants: [ {colonne: valeur…} ] } ] }
@@ -178,7 +177,7 @@ function doPost(e) {
     if (corps.cle !== cle_()) return json_({ ok: false, erreur: 'Clé invalide' });
     const lots = (corps.refs || []).filter((x) => x && x.ref && x.ref.gtin);
     if (!lots.length) return json_({ ok: true, n: 0 });
-    const ss = SpreadsheetApp.getActive();
+    const ss = classeur_();
     const shR = onglet_(ss, ONGLETS.ref, COL_REF);
     const shC = onglet_(ss, ONGLETS.comp, COL_COMP);
     const ligneR = (o) => COL_REF.map((c) => (o[c] == null ? '' : o[c]));

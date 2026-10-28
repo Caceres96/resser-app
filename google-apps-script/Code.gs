@@ -3,10 +3,10 @@
  *
  * Installation (une seule fois) :
  *  1. Créer un projet Apps Script, coller ce fichier, remplacer ID_FEUILLE par l'identifiant
- *     de la feuille (la partie de l'URL entre /d/ et /edit), enregistrer.
- *  2. Exécuter la fonction « configurer » et autoriser l'accès : crée les onglets
- *     Références, Composants, Synthèse et Dictionnaire, et écrit la clé de l'application
- *     dans le journal d'exécution.
+ *     de la feuille de départ (la partie de l'URL entre /d/ et /edit), enregistrer.
+ *  2. Exécuter « creerClasseur » et autoriser l'accès : crée une feuille à votre nom avec les
+ *     onglets Références, Composants, Synthèse et Dictionnaire, et écrit son URL et la clé de
+ *     l'application dans le journal d'exécution.
  *  3. Déployer > Nouveau déploiement > Application Web :
  *     « Exécuter en tant que : moi », « Accès : tout le monde ». Copier l'URL /exec.
  *  4. Dans l'app (Inventaire > Synchronisation) : coller l'URL et la clé.
@@ -14,8 +14,31 @@
  * Les onglets existants (« Hoja 1 ») ne sont jamais modifiés.
  */
 
+// Feuille de départ de l'équipe (lecture seule) ; la feuille de travail est celle créée par creerClasseur().
 const ID_FEUILLE = 'COLLER_ICI_L_ID_DE_LA_FEUILLE';
-const classeur_ = () => SpreadsheetApp.openById(ID_FEUILLE);
+const classeur_ = () => SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('ID_CLASSEUR') || ID_FEUILLE);
+
+// Crée une feuille appartenant à la personne qui exécute le script, y copie le premier onglet
+// de la feuille de départ (saisies manuelles du premier ticket), puis installe la structure.
+function creerClasseur() {
+  const ss = SpreadsheetApp.create('Resser · Test A · données emballages');
+  const vierge = ss.getSheets()[0];
+  try {
+    const src = SpreadsheetApp.openById(ID_FEUILLE).getSheets()[0];
+    const valeurs = src.getDataRange().getValues();
+    const dest = ss.insertSheet('Ticket test (saisie manuelle)');
+    dest.getRange(1, 1, valeurs.length, valeurs[0].length).setValues(valeurs);
+    dest.getRange(1, 1, 1, valeurs[0].length).setFontWeight('bold');
+  } catch (err) {
+    Logger.log(`Feuille de départ non copiée : ${err}`);
+  }
+  PropertiesService.getScriptProperties().setProperty('ID_CLASSEUR', ss.getId());
+  configurer();
+  ss.deleteSheet(vierge);
+  ss.setActiveSheet(ss.getSheetByName(ONGLETS.ref));
+  ss.moveActiveSheet(1);
+  Logger.log(`Nouvelle feuille : ${ss.getUrl()}`);
+}
 
 const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire' };
 

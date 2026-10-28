@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Resser · Test A</title>
+  <meta name="description" content="Outil de test pour caractériser les emballages des produits à partir du code-barres.">
+  <meta name="theme-color" content="#1f6f5c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="30" height="30">
+      <div><strong>Resser</strong><span>Test A · emballages</span></div>
+    </div>
+    <nav class="tabs">
+      <button type="button" data-tab="escanear" class="active">Scanner</button>
+      <button type="button" data-tab="inventario">Inventaire <span id="count" class="pill">0</span></button>
+      <button type="button" data-tab="resumen">Synthèse</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-escanear" class="tab active">
+      <div class="card">
+        <label class="field">Catégorie de l'échantillon
+          <select id="categoria"></select>
+        </label>
+        <div class="row">
+          <input id="gtin" inputmode="numeric" autocomplete="off" placeholder="Code-barres (EAN-13, EAN-8…)">
+          <button id="buscar" type="button" class="primary">Rechercher</button>
+        </div>
+        <button id="camara" type="button" class="secondary wide">Scanner avec la caméra</button>
+        <div id="lector" hidden>
+          <div id="reader"></div>
+          <button id="cerrar-camara" type="button" class="ghost wide">Fermer la caméra</button>
+        </div>
+        <p id="estado" class="muted" role="status"></p>
+      </div>
+      <div id="editor"></div>
+    </section>
+
+    <section id="tab-inventario" class="tab">
+      <div class="card">
+        <div class="row">
+          <input id="filtro" type="search" placeholder="Filtrer par nom, marque ou code">
+        </div>
+        <div class="actions">
+          <button type="button" id="exp-ref" class="secondary">CSV références</button>
+          <button type="button" id="exp-comp" class="secondary">CSV composants</button>
+          <button type="button" id="exp-json" class="secondary">Sauvegarde JSON</button>
+          <label class="button secondary">Importer JSON<input id="imp-json" type="file" accept="application/json,.json" hidden></label>
+        </div>
+      </div>
+      <ul id="lista" class="lista"></ul>
+      <button type="button" id="borrar-todo" class="danger ghost wide">Effacer tout l'inventaire</button>
+    </section>
+
+    <section id="tab-resumen" class="tab"></section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

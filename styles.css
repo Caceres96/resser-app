@@ -147,6 +147,8 @@ details.card[open] > summary::before { content: '▾'; }
 .lista .info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lista .info span { color: var(--muted); font-size: 13px; }
 .vacio { text-align: center; color: var(--muted); padding: 24px 0; }
+.aviso { border-left: 4px solid var(--accent); background: var(--soft); }
+.aviso .note { margin-top: 4px; }
 .ok-sync { color: var(--good); }
 .pend-sync { color: var(--warn); }
 

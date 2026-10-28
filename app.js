@@ -3,7 +3,7 @@ import {
   CAUSAS, ESTADOS_OFF, familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
 } from './reglas.js';
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.5.0';
 const KEY = 'resser.pruebaA.v1'; // clé inchangée pour conserver les données déjà saisies
 const OFF_FIELDS = 'code,product_name,product_name_fr,brands,quantity,packagings,packagings_complete,image_front_small_url';
 // Lecteur de secours (zxing-cpp en WebAssembly) quand le navigateur n'a pas de BarcodeDetector natif (iPhone, Firefox…).
@@ -219,6 +219,8 @@ function filaRef(r) {
     cause: r.causa ? labelDe(CAUSAS, r.causa) : '',
     observations: r.obs,
     version_app: r.version_app,
+    // Fiche complète pour pré-remplir le produit chez les autres membres (non exportée en CSV).
+    donnees_app: JSON.stringify(r, (k, v) => (k === 'sync' || k.startsWith('_') ? undefined : v)),
   };
 }
 
@@ -300,12 +302,24 @@ async function buscar(valor, { reconsultar = false } = {}) {
 
   if (db.refs[gtin] && !reconsultar) {
     estado("Cette référence est déjà dans l'inventaire.");
-    return abrirEditor(structuredClone(db.refs[gtin]));
+    abrirEditor(structuredClone(db.refs[gtin]));
+    verificarEquipo(gtin);
+    return;
   }
   buscando = true;
   $('#buscar').disabled = true;
-  estado('Interrogation des bases Open Facts…');
   try {
+    if (!reconsultar) {
+      estado("Recherche dans le catalogue de l'équipe…");
+      const delEquipo = await consultarEquipo(gtin);
+      if (delEquipo) {
+        estado('');
+        if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
+        abrirEditor(desdeEquipo(delEquipo));
+        return;
+      }
+    }
+    estado('Interrogation des bases Open Facts…');
     const res = await consultarOFF(gtin);
     if (reconsultar && db.refs[gtin]) {
       const r = structuredClone(db.refs[gtin]);
@@ -326,6 +340,48 @@ async function buscar(valor, { reconsultar = false } = {}) {
     buscando = false;
     $('#buscar').disabled = false;
   }
+}
+
+// ---------- Catalogue partagé de l'équipe (feuille Google) ----------
+
+async function consultarEquipo(gtin) {
+  if (!syncConfigurado() || !navigator.onLine) return null;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const url = `${db.prefs.sync_url}?cle=${encodeURIComponent(db.prefs.sync_cle)}&gtin=${encodeURIComponent(gtin)}`;
+    const j = await (await fetch(url, { signal: ctrl.signal })).json();
+    return j.ok && j.ref && j.ref.gtin === gtin && Array.isArray(j.ref.componentes) ? j.ref : null;
+  } catch {
+    return null; // hors connexion ou feuille injoignable : on continue avec Open Facts
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+const fechaCorta = (iso) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '');
+
+// Fiche de l'équipe → brouillon local : le contexte d'achat devient celui du scan en cours.
+function desdeEquipo(ref) {
+  const r = structuredClone(ref);
+  if (ALIAS_CATEGORIAS[r.categoria]) r.categoria = ALIAS_CATEGORIAS[r.categoria];
+  const ctx = db.prefs.contexto || {};
+  if (ctx.enseigne) r.enseigne = ctx.enseigne;
+  if (ctx.commune) r.commune = ctx.commune;
+  if (ctx.fecha) r.date_achat = ctx.fecha;
+  r._equipo = { por: ref.saisi_par || 'un membre de l’équipe', fecha: ref.actualizado, clase: claseFinal(ref), verificado: !!ref.verificado };
+  return r;
+}
+
+// Référence déjà sur ce téléphone : signaler si la feuille en a une version plus récente.
+async function verificarEquipo(gtin) {
+  const delEquipo = await consultarEquipo(gtin);
+  const local = db.refs[gtin];
+  if (!delEquipo || !local || !actual || actual.gtin !== gtin) return;
+  if ((delEquipo.actualizado || '') <= (local.actualizado || '')) return;
+  actual._nuevo = delEquipo;
+  pintarEditor();
+  toast("Une version plus récente existe dans la feuille de l'équipe.");
 }
 
 // Produits sans code-barres (vrac, fruits et légumes, pain…) : identifiant interne « SC-… ».
@@ -498,8 +554,17 @@ function pintarEditor() {
   const insignia = enOFF
     ? `<span class="badge good">Dans ${esc(base.label)}</span>`
     : sinCodigo ? '<span class="badge">Sans code-barres</span>' : '<span class="badge bad">Introuvable dans les bases Open Facts</span>';
+  const eq = r._equipo;
+  const avisoEquipo = eq ? `
+    <div class="card aviso"><strong>Déjà caractérisé par ${esc(eq.por)}</strong> le ${esc(fechaCorta(eq.fecha))}
+      · classe ${esc(eq.clase)}${eq.verificado ? ' · vérifié' : ''}.
+      <div class="note">Les champs sont pré-remplis depuis la feuille de l'équipe : vérifiez, complétez si besoin, puis enregistrez.</div></div>` : '';
+  const nv = r._nuevo;
+  const avisoNuevo = nv ? `
+    <div class="card aviso"><strong>Version plus récente dans la feuille</strong> : ${esc(nv.saisi_par || "l'équipe")}, le ${esc(fechaCorta(nv.actualizado))}, classe ${esc(claseFinal(nv))}${nv.verificado ? ', vérifiée' : ''}.
+      <div class="actions"><button type="button" id="usar-equipo" class="secondary">Charger cette version</button></div></div>` : '';
 
-  ed.innerHTML = `
+  ed.innerHTML = `${avisoEquipo}${avisoNuevo}
     <div class="card">
       <div class="prod">
         ${r.imagen ? `<img src="${esc(r.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
@@ -565,7 +630,7 @@ function pintarEditor() {
       <label class="field">Observations<textarea data-k="obs" placeholder="Ce qui ne correspondait pas, méthode de pesée, photo prise…">${esc(r.obs)}</textarea></label>
       <div class="actions">
         <button type="button" id="guardar" class="primary">Enregistrer la référence</button>
-        ${yaGuardado && enOFF ? '<button type="button" id="reconsultar" class="secondary">Réinterroger la base</button>' : ''}
+        ${(yaGuardado || eq) && enOFF ? '<button type="button" id="reconsultar" class="secondary">Réinterroger la base</button>' : ''}
         <button type="button" id="descartar" class="ghost">${yaGuardado ? 'Fermer' : 'Abandonner'}</button>
       </div>
     </div>`;
@@ -642,9 +707,12 @@ $('#editor').addEventListener('click', (e) => {
   } else if (t.id === 'guardar') {
     if (actual.off.estado === 'sin_codigo' && !actual.nombre.trim()) return toast('Donnez un nom au produit sans code-barres.');
     if (actual.sin_envase) actual.componentes = [];
+    delete actual._equipo;
+    delete actual._nuevo;
     actual.actualizado = ahora();
     actual.version_app = APP_VERSION;
-    actual.saisi_par ||= db.prefs.nombre || '';
+    // saisi_par = dernière personne à avoir enregistré la fiche.
+    actual.saisi_par = db.prefs.nombre || actual.saisi_par || '';
     actual.sync = 'pendiente';
     const gtin = actual.gtin;
     db.refs[gtin] = actual;
@@ -656,6 +724,8 @@ $('#editor').addEventListener('click', (e) => {
     $('#gtin').value = '';
     estado(`${Object.keys(db.refs).length} référence(s) dans l'inventaire.`);
     sincronizar([gtin]);
+  } else if (t.id === 'usar-equipo') {
+    abrirEditor(desdeEquipo(actual._nuevo));
   } else if (t.id === 'reconsultar') {
     buscar(actual.gtin, { reconsultar: true });
   } else if (t.id === 'descartar') {
@@ -772,6 +842,7 @@ $('#lista').addEventListener('click', (e) => {
   mostrarTab('escanear');
   $('#gtin').value = li.dataset.gtin.startsWith('SC-') ? '' : li.dataset.gtin;
   abrirEditor(structuredClone(db.refs[li.dataset.gtin]));
+  verificarEquipo(li.dataset.gtin);
 });
 
 $('#borrar-todo').addEventListener('click', () => {

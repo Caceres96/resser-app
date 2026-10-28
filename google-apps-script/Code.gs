@@ -52,7 +52,7 @@ function copierFeuilleDepart() {
   }
 }
 
-const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire' };
+const ONGLETS = { ref: 'Références', comp: 'Composants', syn: 'Synthèse', dic: 'Dictionnaire', photo: 'Photos' };
 
 // Ordre des colonnes ; l'application envoie des objets avec ces mêmes noms.
 const COL_REF = [
@@ -60,12 +60,14 @@ const COL_REF = [
   'enseigne', 'commune', 'date_achat', 'sans_emballage', 'base_produits', 'statut_off',
   'off_emballages_complets', 'nb_composants', 'materiaux', 'formes', 'masse_plastique_g',
   'classe_suggeree', 'classe_finale', 'verifie', 'donnees_off', 'cause', 'observations', 'version_app',
-  'donnees_app',
+  'photo', 'donnees_app',
 ];
 const COL_COMP = [
   'mis_a_jour', 'saisi_par', 'gtin', 'nom', 'rayon', 'composant', 'forme', 'materiau', 'famille',
   'unites', 'poids_g', 'source_poids', 'consigne_tri', 'recyclage_off', 'origine',
 ];
+// Photo réduite (JPEG en data URL, < 50 000 caractères : limite d'une cellule).
+const COL_PHOTO = ['gtin', 'mis_a_jour', 'saisi_par', 'photo'];
 
 function cle_() {
   const props = PropertiesService.getScriptProperties();
@@ -103,6 +105,7 @@ function configurer() {
   const ss = classeur_();
   onglet_(ss, ONGLETS.ref, COL_REF);
   onglet_(ss, ONGLETS.comp, COL_COMP);
+  onglet_(ss, ONGLETS.photo, COL_PHOTO).hideSheet();
   synthese_(onglet_(ss, ONGLETS.syn));
   dictionnaire_(onglet_(ss, ONGLETS.dic));
   Logger.log(`Clé de l'application : ${cle_()}`);
@@ -178,6 +181,7 @@ function dictionnaire_(sh) {
     ['Références', 'verifie', 'Emballages contrôlés sur le produit physique'],
     ['Références', 'donnees_off', 'Les emballages décrits par la base étaient-ils corrects ?'],
     ['Références', 'cause', "Raison principale d'une donnée manquante ou erronée"],
+    ['Références', 'photo', 'oui = une photo du produit existe (onglet masqué « Photos », affichée dans l’application)'],
     ['Références', 'donnees_app', "Fiche complète au format de l'application (JSON) : sert à pré-remplir le produit quand un autre membre le scanne. Ne pas modifier à la main"],
     ['Composants', 'composant', "Numéro du composant dans l'emballage (bouteille, bouchon, étiquette…)"],
     ['Composants', 'forme / materiau / famille', 'Taxonomie Open Food Facts, regroupée en familles (plastique, verre, papier/carton, métal, composite…)'],
@@ -213,7 +217,15 @@ function doGet(e) {
   const ligne = lignes.find((r) => String(r[iG]) === String(p.gtin));
   let ref = null;
   try { ref = ligne && ligne[iJ] ? JSON.parse(ligne[iJ]) : null; } catch (err) { ref = null; }
-  return json_({ ok: true, ref });
+  return json_({ ok: true, ref, photo: ref ? photo_(ss, p.gtin) : null });
+}
+
+function photo_(ss, gtin) {
+  const sh = ss.getSheetByName(ONGLETS.photo);
+  const n = sh ? sh.getLastRow() - 1 : 0;
+  if (n < 1) return null;
+  const ligne = sh.getRange(2, 1, n, COL_PHOTO.length).getValues().find((r) => String(r[0]) === String(gtin));
+  return ligne ? ligne[3] : null;
 }
 
 // Corps attendu : { cle, refs: [ { ref: {colonne: valeur…}, composants: [ {colonne: valeur…} ] } ] }
@@ -232,15 +244,33 @@ function doPost(e) {
     const ligneR = (o) => COL_REF.map((c) => (o[c] == null ? '' : o[c]));
     const ligneC = (o) => COL_COMP.map((c) => (o[c] == null ? '' : o[c]));
 
-    // Références : mise à jour sur place ou ajout.
-    const iG = COL_REF.indexOf('gtin');
+    // Photos : une par gtin, remplacée si une nouvelle arrive.
+    const avecPhoto = lots.filter((x) => typeof x.photo === 'string' && x.photo.startsWith('data:image/') && x.photo.length < 50000);
+    if (avecPhoto.length) {
+      const shP = onglet_(ss, ONGLETS.photo, COL_PHOTO);
+      const nP = shP.getLastRow() - 1;
+      const gP = nP > 0 ? shP.getRange(2, 1, nP, 1).getValues().map((r) => String(r[0])) : [];
+      avecPhoto.forEach((x) => {
+        const ligne = [String(x.ref.gtin), x.ref.mis_a_jour || '', x.ref.saisi_par || '', x.photo];
+        const i = gP.indexOf(String(x.ref.gtin));
+        if (i >= 0) shP.getRange(i + 2, 1, 1, COL_PHOTO.length).setValues([ligne]);
+        else { shP.appendRow(ligne); gP.push(String(x.ref.gtin)); }
+        x.ref.photo = 'oui';
+      });
+    }
+
+    // Références : mise à jour sur place ou ajout. Une photo déjà enregistrée reste signalée.
+    const iG = COL_REF.indexOf('gtin'), iP = COL_REF.indexOf('photo');
     const nR = shR.getLastRow() - 1;
-    const gtins = nR > 0 ? shR.getRange(2, iG + 1, nR, 1).getValues().map((r) => String(r[0])) : [];
+    const existantes = nR > 0 ? shR.getRange(2, 1, nR, COL_REF.length).getValues() : [];
+    const gtins = existantes.map((r) => String(r[iG]));
     const nouvelles = [];
     lots.forEach((x) => {
       const i = gtins.indexOf(String(x.ref.gtin));
-      if (i >= 0) shR.getRange(i + 2, 1, 1, COL_REF.length).setValues([ligneR(x.ref)]);
-      else nouvelles.push(ligneR(x.ref));
+      if (i >= 0) {
+        if (!x.ref.photo && existantes[i][iP] === 'oui') x.ref.photo = 'oui';
+        shR.getRange(i + 2, 1, 1, COL_REF.length).setValues([ligneR(x.ref)]);
+      } else nouvelles.push(ligneR(x.ref));
     });
     if (nouvelles.length) shR.getRange(shR.getLastRow() + 1, 1, nouvelles.length, COL_REF.length).setValues(nouvelles);
 

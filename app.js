@@ -3,7 +3,7 @@ import {
   CAUSAS, ESTADOS_OFF, familiaDe, labelDe, labelMaterial, labelForma, consignaTri, FUENTE_TRI,
 } from './reglas.js';
 
-const APP_VERSION = '0.6.0';
+const APP_VERSION = '0.7.0';
 const KEY = 'resser.pruebaA.v1'; // clé inchangée pour conserver les données déjà saisies
 const OFF_FIELDS = 'code,product_name,product_name_fr,brands,quantity,packagings,packagings_complete,image_front_small_url';
 // Lecteur de secours (zxing-cpp en WebAssembly) quand le navigateur n'a pas de BarcodeDetector natif (iPhone, Firefox…).
@@ -230,7 +230,7 @@ function filaRef(r) {
     version_app: r.version_app,
     photo: r.photo || r.photo_en_feuille ? 'oui' : '',
     // Fiche complète pour pré-remplir le produit chez les autres membres (non exportée en CSV).
-    donnees_app: JSON.stringify(r, (k, v) => (k === 'sync' || k === 'photo' || k.startsWith('_') ? undefined : v)),
+    donnees_app: JSON.stringify(r, (k, v) => (['sync', 'photo', 'achat_pendiente'].includes(k) || k.startsWith('_') ? undefined : v)),
   };
 }
 
@@ -345,7 +345,7 @@ async function buscar(valor, { reconsultar = false } = {}) {
       r.componentes = componentesDesdeOFF(p.packagings);
       r.verificado = false;
       estado('Données mises à jour. Vérifiez à nouveau puis enregistrez.');
-      abrirEditor(r);
+      abrirEditor(r, actual?._origen || 'scan');
     } else {
       const base = labelDe(BASES, res.base);
       estado((res.estado === 'encontrado'
@@ -567,8 +567,10 @@ $('#foto').addEventListener('change', async (e) => {
 
 let actual = null;
 
-function abrirEditor(r) {
+// origen : 'scan' (un achat de plus au Journal à l'enregistrement) ou 'liste' (simple correction).
+function abrirEditor(r, origen = 'scan') {
   actual = r;
+  actual._origen = origen;
   pintarEditor();
   $('#editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -666,6 +668,7 @@ function pintarEditor() {
         </label>
       </div>
       <p class="note" id="masa"></p>
+      ${r._origen === 'liste' ? '<p class="note">Correction d’une fiche : n’ajoute pas d’achat au tableau de bord. Pour un nouvel achat, scannez le produit.</p>' : ''}
       <label class="field">Observations<textarea data-k="obs" placeholder="Ce qui ne correspondait pas, méthode de pesée, photo prise…">${esc(r.obs)}</textarea></label>
       <div class="actions">
         <button type="button" id="guardar" class="primary">Enregistrer la référence</button>
@@ -781,6 +784,7 @@ $('#editor').addEventListener('click', (e) => {
     }
     if (actual.off.estado === 'sin_codigo' && !actual.nombre.trim()) return toast('Donnez un nom au produit sans code-barres.');
     if (actual.sin_envase) actual.componentes = [];
+    if (actual._origen === 'scan') actual.achat_pendiente = true;
     for (const k of Object.keys(actual)) if (k.startsWith('_')) delete actual[k];
     actual.actualizado = ahora();
     actual.version_app = APP_VERSION;
@@ -798,7 +802,7 @@ $('#editor').addEventListener('click', (e) => {
     estado(`${Object.keys(db.refs).length} référence(s) dans l'inventaire.`);
     sincronizar([gtin]);
   } else if (t.id === 'usar-equipo') {
-    abrirEditor(desdeEquipo(actual._nuevo, actual._nuevoPhoto));
+    abrirEditor(desdeEquipo(actual._nuevo, actual._nuevoPhoto), actual._origen);
   } else if (t.id === 'reconsultar') {
     buscar(actual.gtin, { reconsultar: true });
   } else if (t.id === 'descartar') {
@@ -854,7 +858,7 @@ async function sincronizar(gtins) {
       const lote = lista.slice(i, i + 25);
       const r = await fetch(FEUILLE.url, {
         method: 'POST',
-        body: JSON.stringify({ cle: FEUILLE.cle, refs: lote.map((x) => ({ ref: filaRef(x), composants: filasComp(x), photo: x.photo || null })) }),
+        body: JSON.stringify({ cle: FEUILLE.cle, refs: lote.map((x) => ({ ref: filaRef(x), composants: filasComp(x), photo: x.photo || null, achat: !!x.achat_pendiente })) }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.erreur || 'refusé');
@@ -862,6 +866,7 @@ async function sincronizar(gtins) {
       lote.forEach((x) => {
         if (db.refs[x.gtin] !== x) return;
         x.sync = 'ok';
+        delete x.achat_pendiente;
         if (x.photo) { x.photo_en_feuille = true; delete x.photo; }
       });
       enviadas += lote.length;
@@ -910,7 +915,7 @@ $('#lista').addEventListener('click', (e) => {
   if (!li) return;
   mostrarTab('escanear');
   $('#gtin').value = li.dataset.gtin.startsWith('SC-') ? '' : li.dataset.gtin;
-  abrirEditor(structuredClone(db.refs[li.dataset.gtin]));
+  abrirEditor(structuredClone(db.refs[li.dataset.gtin]), 'liste');
   verificarEquipo(li.dataset.gtin);
 });
 

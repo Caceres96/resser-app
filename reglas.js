@@ -94,7 +94,18 @@ export const FORMAS = [
   { id: 'en:sleeve', label: 'Manchon' },
   { id: 'en:label', label: 'Étiquette' },
   { id: 'en:blister', label: 'Blister' },
+  { id: 'en:drink-can', label: 'Canette' },
+  { id: 'en:packet', label: 'Paquet' },
+  { id: 'en:cup', label: 'Gobelet' },
+  { id: 'en:capsule', label: 'Capsule' },
+  { id: 'en:tube', label: 'Tube' },
+  { id: 'en:net', label: 'Filet' },
+  { id: 'en:aerosol-can', label: 'Aérosol' },
+  { id: 'en:individual-dose', label: 'Dose individuelle' },
 ];
+
+// Identifiant Open Facts sans libellé connu : « en:drink-can » → « drink can ».
+const lisible = (id) => String(id || '').replace(/^[a-z]{2}:/, '').replace(/-/g, ' ');
 
 export const PESO_FUENTES = [
   { id: '', label: 'Sans poids' },
@@ -144,8 +155,8 @@ export function familiaDe(material) {
 }
 
 export const labelDe = (lista, id) => lista.find((x) => x.id === (id || ''))?.label || id || '';
-export const labelMaterial = (id) => MAT[id]?.label || id || '—';
-export const labelForma = (id) => FOR[id]?.label || id || '—';
+export const labelMaterial = (id) => MAT[id]?.label || lisible(id) || '—';
+export const labelForma = (id) => FOR[id]?.label || lisible(id) || '—';
 
 // Consigne de tri par famille de matériau.
 // Statut : règle nationale générale (extension des consignes de tri, généralisée en France en 2023).

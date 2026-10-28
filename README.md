@@ -36,6 +36,8 @@ La masse plastique (Σ unités × poids des composants plastiques) n'est renseig
 
 `google-apps-script/Code.gs` reçoit les références de tous les téléphones dans une même feuille (onglets Références, Composants, Synthèse, Dictionnaire) et renvoie la fiche d'un produit déjà caractérisé, que l'app affiche pré-remplie. Installation : voir l'en-tête du fichier. L'URL du script est intégrée à l'app ; chaque personne saisit seulement son nom et la clé de l'équipe dans « Contexte d'achat ». La clé n'est pas dans ce dépôt.
 
+Chaque fiche enregistrée après un scan ajoute un achat au « Journal des achats » (une ligne par composant) ; une correction depuis l'inventaire n'en ajoute pas. L'onglet « Tableau de bord » en tire les chiffres clés et les graphiques sur 7 / 30 / 365 jours, par semaine, mois et année (`?cle=…&accion=configurer` le reconstruit).
+
 Recherche d'un code scanné : téléphone → feuille de l'équipe → bases Open Facts → création (avec photo réduite, gardée dans l'onglet masqué « Photos »).
 
 ## Données

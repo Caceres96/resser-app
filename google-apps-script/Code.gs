@@ -25,6 +25,7 @@ const COL_REF = [
   'enseigne', 'commune', 'date_achat', 'sans_emballage', 'base_produits', 'statut_off',
   'off_emballages_complets', 'nb_composants', 'materiaux', 'formes', 'masse_plastique_g',
   'classe_suggeree', 'classe_finale', 'verifie', 'donnees_off', 'cause', 'observations', 'version_app',
+  'donnees_app',
 ];
 const COL_COMP = [
   'mis_a_jour', 'saisi_par', 'gtin', 'nom', 'rayon', 'composant', 'forme', 'materiau', 'famille',
@@ -142,6 +143,7 @@ function dictionnaire_(sh) {
     ['Références', 'verifie', 'Emballages contrôlés sur le produit physique'],
     ['Références', 'donnees_off', 'Les emballages décrits par la base étaient-ils corrects ?'],
     ['Références', 'cause', "Raison principale d'une donnée manquante ou erronée"],
+    ['Références', 'donnees_app', "Fiche complète au format de l'application (JSON) : sert à pré-remplir le produit quand un autre membre le scanne. Ne pas modifier à la main"],
     ['Composants', 'composant', "Numéro du composant dans l'emballage (bouteille, bouchon, étiquette…)"],
     ['Composants', 'forme / materiau / famille', 'Taxonomie Open Food Facts, regroupée en familles (plastique, verre, papier/carton, métal, composite…)'],
     ['Composants', 'unites / poids_g', 'Nombre de ce composant par unité de vente ; poids d’une unité en grammes'],
@@ -161,10 +163,22 @@ function dictionnaire_(sh) {
 
 const json_ = (o) => ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 
-// Test de connexion depuis l'application : ?cle=XXXX
+// ?cle=XXXX : test de connexion. ?cle=XXXX&gtin=… : fiche déjà saisie par l'équipe (ou null),
+// pour pré-remplir l'application quand quelqu'un d'autre a déjà caractérisé le produit.
 function doGet(e) {
-  const ok = e && e.parameter && e.parameter.cle === cle_();
-  return json_(ok ? { ok: true, feuille: classeur_().getName() } : { ok: false, erreur: 'Clé invalide' });
+  const p = (e && e.parameter) || {};
+  if (p.cle !== cle_()) return json_({ ok: false, erreur: 'Clé invalide' });
+  const ss = classeur_();
+  if (!p.gtin) return json_({ ok: true, feuille: ss.getName() });
+  const sh = ss.getSheetByName(ONGLETS.ref);
+  const n = sh ? sh.getLastRow() - 1 : 0;
+  if (n < 1) return json_({ ok: true, ref: null });
+  const iG = COL_REF.indexOf('gtin'), iJ = COL_REF.indexOf('donnees_app');
+  const lignes = sh.getRange(2, 1, n, COL_REF.length).getValues();
+  const ligne = lignes.find((r) => String(r[iG]) === String(p.gtin));
+  let ref = null;
+  try { ref = ligne && ligne[iJ] ? JSON.parse(ligne[iJ]) : null; } catch (err) { ref = null; }
+  return json_({ ok: true, ref });
 }
 
 // Corps attendu : { cle, refs: [ { ref: {colonne: valeur…}, composants: [ {colonne: valeur…} ] } ] }

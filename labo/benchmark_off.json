@@ -1,0 +1,577 @@
+{
+ "source": "Open Food Facts (ODbL)",
+ "date": "2026-10-29",
+ "produits": [
+  {
+   "code": "5449000214911",
+   "nom": "Coca-Cola",
+   "marque": [
+    "Coca-Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/544/900/021/4911/front_hi.242.400.jpg",
+   "composants": [
+    {
+     "forme": "en:drink-can",
+     "materiau": "en:aluminium"
+    }
+   ]
+  },
+  {
+   "code": "5449000000996",
+   "nom": "Coca-Cola",
+   "marque": [
+    "Coca-Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/544/900/000/0996/front_en.782.400.jpg",
+   "composants": [
+    {
+     "forme": "en:drink-can",
+     "materiau": "en:aluminium"
+    }
+   ]
+  },
+  {
+   "code": "5449000214799",
+   "nom": "Coke zero",
+   "marque": [
+    "Coca Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/544/900/021/4799/front.3.400.jpg",
+   "composants": [
+    {
+     "forme": "en:drink-can",
+     "materiau": "en:aluminium"
+    }
+   ]
+  },
+  {
+   "code": "54491472",
+   "nom": "Coca Cola 500ml",
+   "marque": [
+    "Coca-Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/54491472/front_ro.405.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-1-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "5449000131836",
+   "nom": "Zero Sugar",
+   "marque": [
+    "Coca-Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/544/900/013/1836/front.19.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-1-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "5000112611861",
+   "nom": "Original taste",
+   "marque": [
+    "Coca-Cola"
+   ],
+   "categorie": "en:sodas",
+   "image": "https://images.openfoodfacts.org/images/products/500/011/261/1861/front_fr.151.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3274080005003",
+   "nom": "Eau de source",
+   "marque": [
+    "Cristaline"
+   ],
+   "categorie": "en:waters",
+   "image": "https://images.openfoodfacts.org/images/products/327/408/000/5003/front_fr.994.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-1-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "3268840001008",
+   "nom": "Eau de source",
+   "marque": [
+    "Cristaline"
+   ],
+   "categorie": "en:waters",
+   "image": "https://images.openfoodfacts.org/images/products/326/884/000/1008/front_fr.377.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-1-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "8002270014901",
+   "nom": "S. Pellegrino Water",
+   "marque": [
+    "San Pellegrino",
+    "Nestlé Waters",
+    "Nestlé"
+   ],
+   "categorie": "en:waters",
+   "image": "https://images.openfoodfacts.org/images/products/800/227/001/4901/front_en.304.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "fr:PET 1 - PolytÃÂ©rÃÂ©phtalate d'ÃÂ©thylÃÂ¨ne"
+    },
+    {
+     "forme": "fr:ÃÂ©tiquette",
+     "materiau": "en:paper"
+    }
+   ]
+  },
+  {
+   "code": "7613036249928",
+   "nom": "eau minerale",
+   "marque": [
+    "Vittel",
+    "Nestlé Waters",
+    "Nestlé"
+   ],
+   "categorie": "en:waters",
+   "image": "https://images.openfoodfacts.org/images/products/761/303/624/9928/front_fr.372.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:rpet-recycled-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "7613035974685",
+   "nom": "hepar",
+   "marque": [
+    "Hépar",
+    "Nestlé Waters",
+    "Nestlé"
+   ],
+   "categorie": "en:waters",
+   "image": "https://images.openfoodfacts.org/images/products/761/303/597/4685/front_fr.288.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:rpet-transparent"
+    }
+   ]
+  },
+  {
+   "code": "3502110009449",
+   "nom": "Orangensaft",
+   "marque": [
+    "Tropicana"
+   ],
+   "categorie": "en:fruit-juices",
+   "image": "https://images.openfoodfacts.org/images/products/350/211/000/9449/front_en.151.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:tethered-cap",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "20019907",
+   "nom": "Jus de citron à base de concentré",
+   "marque": [
+    "Solevita"
+   ],
+   "categorie": "en:fruit-juices",
+   "image": "https://images.openfoodfacts.org/images/products/20019907/front.9.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:recycled-plastic"
+    }
+   ]
+  },
+  {
+   "code": "3252210390014",
+   "nom": "",
+   "marque": [
+    "Lactel"
+   ],
+   "categorie": "en:milks",
+   "image": "https://images.openfoodfacts.org/images/products/325/221/039/0014/front_en.200.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:hdpe-2-high-density-polyethylene"
+    }
+   ]
+  },
+  {
+   "code": "3661344688339",
+   "nom": "Les 2 Vaches Vanille Bio de Madagascar 4 x 115 g",
+   "marque": [
+    "Les 2 Vaches"
+   ],
+   "categorie": "en:yogurts",
+   "image": "https://images.openfoodfacts.org/images/products/366/134/468/8339/front_fr.54.400.jpg",
+   "composants": [
+    {
+     "forme": "en:pot",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3023260030928",
+   "nom": "Salakis 100% Brebis",
+   "marque": [
+    "Salakis",
+    "Lactalis"
+   ],
+   "categorie": "en:cheeses",
+   "image": "https://images.openfoodfacts.org/images/products/302/326/003/0928/front_en.133.400.jpg",
+   "composants": [
+    {
+     "forme": "en:film",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:tray",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3175680011480",
+   "nom": "Sésame",
+   "marque": [
+    "Gerblé"
+   ],
+   "categorie": "en:biscuits",
+   "image": "https://images.openfoodfacts.org/images/products/317/568/001/1480/front_fr.139.400.jpg",
+   "composants": [
+    {
+     "forme": "en:box",
+     "materiau": "en:recycled-cardboard"
+    },
+    {
+     "forme": "en:individual-bag",
+     "materiau": "en:aluminium"
+    }
+   ]
+  },
+  {
+   "code": "7622201133337",
+   "nom": "Figolu",
+   "marque": [
+    "LU",
+    "Mondelez"
+   ],
+   "categorie": "en:biscuits",
+   "image": "https://images.openfoodfacts.org/images/products/762/220/113/3337/front_fr.124.400.jpg",
+   "composants": [
+    {
+     "forme": "en:tray",
+     "materiau": "en:cardboard"
+    },
+    {
+     "forme": "en:bag",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3061990143365",
+   "nom": "Biscuits goût chocolat",
+   "marque": [
+    "BN"
+   ],
+   "categorie": "en:biscuits",
+   "image": "https://images.openfoodfacts.org/images/products/306/199/014/3365/front_fr.98.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bag",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:card",
+     "materiau": "en:cardboard"
+    }
+   ]
+  },
+  {
+   "code": "7613035040823",
+   "nom": "Nestlé Dessert",
+   "marque": [
+    "Nestlé",
+    "Nestlé Dessert"
+   ],
+   "categorie": "en:chocolates",
+   "image": "https://images.openfoodfacts.org/images/products/761/303/504/0823/front_en.357.400.jpg",
+   "composants": [
+    {
+     "forme": "en:sheet",
+     "materiau": "en:aluminium"
+    },
+    {
+     "forme": "en:sheet",
+     "materiau": "en:paper"
+    },
+    {
+     "forme": "en:film",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:sheet",
+     "materiau": "en:paper"
+    },
+    {
+     "forme": "en:sheet",
+     "materiau": "en:metal"
+    }
+   ]
+  },
+  {
+   "code": "20004132",
+   "nom": "Rosii - Chooped tomatoes",
+   "marque": [
+    "Baresa",
+    " Freshona"
+   ],
+   "categorie": "en:canned-vegetables",
+   "image": "https://images.openfoodfacts.org/images/products/20004132/front_hr.303.400.jpg",
+   "composants": [
+    {
+     "forme": "en:food-can",
+     "materiau": "en:steel"
+    },
+    {
+     "forme": "fi:Etiketti",
+     "materiau": "en:paper"
+    }
+   ]
+  },
+  {
+   "code": "3168930010265",
+   "nom": "cruesly mélange de noix",
+   "marque": [
+    "Quaker"
+   ],
+   "categorie": "en:breakfast-cereals",
+   "image": "https://images.openfoodfacts.org/images/products/316/893/001/0265/front_fr.259.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bag",
+     "materiau": "es:PlÃ¡stico"
+    }
+   ]
+  },
+  {
+   "code": "7613034626844",
+   "nom": "Céréales Chocapic",
+   "marque": [
+    "Nestlé"
+   ],
+   "categorie": "en:breakfast-cereals",
+   "image": "https://images.openfoodfacts.org/images/products/761/303/462/6844/front_fr.355.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bag",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:box",
+     "materiau": "en:cardboard"
+    }
+   ]
+  },
+  {
+   "code": "3229820019307",
+   "nom": "Flocons d'avoine",
+   "marque": [
+    "Bjorg"
+   ],
+   "categorie": "en:breakfast-cereals",
+   "image": "https://images.openfoodfacts.org/images/products/322/982/001/9307/front.15.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bag",
+     "materiau": "en:hdpe-2-high-density-polyethylene"
+    }
+   ]
+  },
+  {
+   "code": "3229820782560",
+   "nom": "Muesli Superfruits",
+   "marque": [
+    "Bjorg"
+   ],
+   "categorie": "en:breakfast-cereals",
+   "image": "https://images.openfoodfacts.org/images/products/322/982/078/2560/front.3.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bag",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "8715700407760",
+   "nom": "Tomato Ketchup BIO",
+   "marque": [
+    "Heinz"
+   ],
+   "categorie": "en:sauces",
+   "image": "https://images.openfoodfacts.org/images/products/871/570/040/7760/front.6.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-transparent"
+    },
+    {
+     "forme": "en:vial",
+     "materiau": "es:PlÃ¡stico"
+    }
+   ]
+  },
+  {
+   "code": "3178050000749",
+   "nom": "Huile d'olive",
+   "marque": [
+    "Puget"
+   ],
+   "categorie": "en:vegetable-oils",
+   "image": "https://images.openfoodfacts.org/images/products/317/805/000/0749/front_fr.95.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:clear-glass"
+    },
+    {
+     "forme": "en:tethered-cap",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3265474573000",
+   "nom": "Fleur de Colza",
+   "marque": [
+    "Lesieur"
+   ],
+   "categorie": "en:vegetable-oils",
+   "image": "https://images.openfoodfacts.org/images/products/326/547/457/3000/front.3.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:pet-1-polyethylene-terephthalate"
+    }
+   ]
+  },
+  {
+   "code": "3017620422003",
+   "nom": "Nutella",
+   "marque": [
+    "Nutella",
+    "Ferrero"
+   ],
+   "categorie": "en:spreads",
+   "image": "https://images.openfoodfacts.org/images/products/301/762/042/2003/front_fr.715.400.jpg",
+   "composants": [
+    {
+     "forme": "en:bottle",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "80135463",
+   "nom": "",
+   "marque": [
+    "Nutella",
+    "Ferrero"
+   ],
+   "categorie": "en:spreads",
+   "image": "https://images.openfoodfacts.org/images/products/80135463/front_fr.324.400.jpg",
+   "composants": [
+    {
+     "forme": "en:pot",
+     "materiau": "en:clear-glass"
+    }
+   ]
+  },
+  {
+   "code": "7613035676497",
+   "nom": "Ricoré original",
+   "marque": [
+    "Nestlé"
+   ],
+   "categorie": "en:coffees",
+   "image": "https://images.openfoodfacts.org/images/products/761/303/567/6497/front_fr.409.400.jpg",
+   "composants": [
+    {
+     "forme": "en:box",
+     "materiau": "en:metal"
+    }
+   ]
+  },
+  {
+   "code": "3302740047367",
+   "nom": "Le Supérieur - à l'Etouffée - Conservation sans Nitrite",
+   "marque": [
+    "Fleury Michon"
+   ],
+   "categorie": "en:meats",
+   "image": "https://images.openfoodfacts.org/images/products/330/274/004/7367/front_fr.304.400.jpg",
+   "composants": [
+    {
+     "forme": "en:film",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:tray",
+     "materiau": "en:plastic"
+    }
+   ]
+  },
+  {
+   "code": "3095758914010",
+   "nom": "Allumettes de Jambon",
+   "marque": [
+    "Fleury Michon"
+   ],
+   "categorie": "en:meats",
+   "image": "https://images.openfoodfacts.org/images/products/309/575/891/4010/front_fr.166.400.jpg",
+   "composants": [
+    {
+     "forme": "en:tray",
+     "materiau": "en:plastic"
+    },
+    {
+     "forme": "en:film",
+     "materiau": "en:plastic"
+    }
+   ]
+  }
+ ]
+}

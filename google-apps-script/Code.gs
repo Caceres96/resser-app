@@ -358,6 +358,20 @@ function doGet(e) {
   const ss = classeur_();
   // Maintenance : ?cle=…&accion=configurer recrée Synthèse et Dictionnaire (données intactes).
   if (p.accion === 'configurer') { configurer(); return json_({ ok: true, configure: true }); }
+  // Catalogue léger (sans photos ni fiches complètes) : sert à rapprocher les libellés de ticket.
+  if (p.accion === 'lista') {
+    const shR = ss.getSheetByName(ONGLETS.ref);
+    const nR = shR ? shR.getLastRow() - 1 : 0;
+    if (nR < 1) return json_({ ok: true, produits: [] });
+    const c = (nom) => COL_REF.indexOf(nom);
+    const produits = shR.getRange(2, 1, nR, COL_REF.length).getValues()
+      .filter((r) => r[c('gtin')])
+      .map((r) => ({
+        gtin: String(r[c('gtin')]), nom: r[c('nom')], marque: r[c('marque')], libelle: r[c('libelle_ticket')],
+        rayon: r[c('rayon')], classe: r[c('classe_finale')], verifie: r[c('verifie')],
+      }));
+    return json_({ ok: true, produits });
+  }
   if (!p.gtin) return json_({ ok: true, feuille: ss.getName() });
   const sh = ss.getSheetByName(ONGLETS.ref);
   const n = sh ? sh.getLastRow() - 1 : 0;
